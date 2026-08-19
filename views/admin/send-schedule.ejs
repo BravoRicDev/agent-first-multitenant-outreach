@@ -1,0 +1,65 @@
+<div class="page-header">
+  <h1>Fasce Orarie Invio</h1>
+  <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+</div>
+
+<div class="card">
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">
+    Le email vengono inviate solo nelle fasce orarie consentite (fusi orario Europa/Roma).
+    Spunta le ore in cui l'invio è permesso.
+  </p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Giorno</th><% for(let h=0;h<24;h++){ %><th style="font-size:11px;padding:4px 2px;"><%= h %></th><% } %></tr></thead>
+    <tbody id="scheduleBody"></tbody>
+  </table>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:16px;">
+    <button class="btn btn-primary" id="saveAllBtn">Salva modifiche</button>
+    <span id="scheduleMsg" style="font-size:13px;align-self:center;"></span>
+  </div>
+</div>
+
+<script>
+const DAYS = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+const schedule = {};
+
+async function load() {
+  const res = await fetch('/api/admin/send-schedule');
+  const data = await res.json();
+  data.forEach(r => { if(!schedule[r.dow]) schedule[r.dow]={}; schedule[r.dow][r.hour]=r.allowed; });
+  let html = '';
+  for(let d=0;d<7;d++){
+    html += `<tr><td><strong>${DAYS[d]}</strong></td>`;
+    for(let h=0;h<24;h++){
+      const ch = (schedule[d] && schedule[d][h] === true) ? 'checked' : '';
+      html += `<td style="padding:4px;"><input type="checkbox" data-dow="${d}" data-hour="${h}" ${ch} aria-label="${DAYS[d]} ore ${h}"></td>`;
+    }
+    html += '</tr>';
+  }
+  document.getElementById('scheduleBody').innerHTML = html;
+}
+
+async function saveAll() {
+  const checks = document.querySelectorAll('#scheduleBody input[type="checkbox"]');
+  const allowed = [];
+  const blocked = [];
+  checks.forEach(cb => {
+    if(cb.checked) allowed.push({dow:parseInt(cb.dataset.dow), hour:parseInt(cb.dataset.hour)});
+    else blocked.push({dow:parseInt(cb.dataset.dow), hour:parseInt(cb.dataset.hour)});
+  });
+  const btn = document.getElementById('saveAllBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/send-schedule', {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({allowed,blocked})
+    });
+    if(res.ok) document.getElementById('scheduleMsg').textContent = 'Salvato ✓';
+  } catch { showToast('Errore', 'error'); }
+  btn.disabled = false;
+}
+
+load();
+
+document.getElementById('saveAllBtn')?.addEventListener('click', saveAll);
+</script>

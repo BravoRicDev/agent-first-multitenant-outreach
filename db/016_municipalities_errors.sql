@@ -1,0 +1,2 @@
+ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS error_count INT DEFAULT 0;
+ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS error_note TEXT;

@@ -1,0 +1,40 @@
+<div class="page-header">
+  <h1>Error Digest</h1>
+  <div style="display:flex;gap:8px;">
+    <a href="/admin/audit" class="btn btn-secondary">← Audit Log</a>
+    <button class="btn btn-danger" id="cleanupErrorsBtn">🗑 Pulisci errori</button>
+  </div>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th>Azione</th><th>Risorsa</th><th>Conteggio</th><th>Ultimo errore</th></tr></thead>
+    <tbody>
+      <% errors.forEach(e => { %>
+      <tr>
+        <td><code><%= e.action %></code></td>
+        <td><%= e.resource || '-' %></td>
+        <td><span class="badge <%= e.cnt > 10 ? 'badge-danger' : 'badge-warning' %>"><%= e.cnt %></span></td>
+        <td><%= new Date(e.last_occurrence).toLocaleString('it-IT') %></td>
+      </tr>
+      <% }) %>
+      <% if (errors.length === 0) { %>
+      <tr><td colspan="4" style="text-align:center;color:var(--text-secondary);">Nessun errore registrato</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+async function cleanupErrors(event) {
+  if (!confirm("Eliminare tutti i aziende senza comune e pulire gli errori?")) return;
+  var btn = event.target;
+  btn.disabled = true; btn.textContent = "⏳ Pulizia...";
+  try {
+    var res = await fetch("/api/cron/cleanup", { method: "POST" });
+    var data = await res.json();
+    if (data.success) { showToast("✅ Pulizia completata"); setTimeout(function(){ location.reload(); }, 1500); }
+    else { showToast("❌ " + (data.error || "Errore"), "error"); btn.disabled = false; btn.textContent = "🗑 Pulisci errori"; }
+  } catch(e) { showToast("❌ Errore di connessione", "error"); btn.disabled = false; btn.textContent = "🗑 Pulisci errori"; }
+}
+document.getElementById('cleanupErrorsBtn').addEventListener('click', cleanupErrors);
+</script>

@@ -1,0 +1,360 @@
+openapi: "3.0.3"
+info:
+  title: Outreach Service API
+  version: "1.0.0"
+  description: API per gestione outreach email aziende
+
+servers:
+  - url: https://outreach.example.com
+    description: Produzione
+  - url: http://localhost:3002
+    description: Sviluppo
+
+paths:
+  /health:
+    get:
+      summary: Health check con dipendenze
+      responses:
+        "200":
+          description: Tutti i servizi ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  checks:
+                    type: object
+                    properties:
+                      db: { type: boolean }
+                      listmonk: { type: boolean }
+                      uptime: { type: number }
+                      memory_mb: { type: number }
+        "503":
+          description: Uno o più servizi non disponibili
+
+  /api/auth/login:
+    post:
+      summary: Invia OTP via email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Email inviata se utente registrato
+        "400":
+          description: Validazione fallita
+
+  /api/auth/verify:
+    post:
+      summary: Verifica OTP o magic link e restituisce JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                otp: { type: string, minLength: 6, maxLength: 6 }
+                token: { type: string }
+      responses:
+        "200":
+          description: Login riuscito, cookie token impostato
+        "401":
+          description: Codice non valido o scaduto
+
+  /api/auth/logout:
+    post:
+      summary: Logout, cancella cookie token
+      responses:
+        "302":
+          description: Redirect a /login
+
+  /companies:
+    get:
+      summary: Lista aziende con filtri
+      parameters:
+        - { name: comune, in: query, schema: { type: string } }
+        - { name: approvato, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { name: inviato, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { name: bozza, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Pagina HTML con lista aziende
+
+  /companies/{id}:
+    get:
+      summary: Dettaglio azienda
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Pagina HTML dettaglio }
+        "404": { description: Azienda non trovato }
+
+  /api/companies/{id}:
+    patch:
+      summary: Aggiorna azienda
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approvato: { type: boolean }
+                inviato: { type: boolean }
+                bozza_rifai: { type: boolean }
+                bozza_email: { type: string, maxLength: 50000 }
+                bozza_email_oggetto: { type: string, maxLength: 500 }
+                email: { type: string, format: email }
+              additionalProperties: false
+      responses:
+        "200": { description: Aggiornato }
+        "400": { description: Validazione fallita o campo non consentito }
+    delete:
+      summary: Elimina azienda
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Eliminato }
+
+  /api/companies/{id}/send:
+    post:
+      summary: Invia email a azienda (crea subscriber + send + sequenze follow-up)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Email inviata }
+        "400": { description: Nessuna bozza approvata da inviare }
+        "500": { description: Subscriber o send fallito }
+
+  /api/scraper/url:
+    post:
+      summary: Scarica contenuto URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+              required: [url]
+      responses:
+        "200": { description: Contenuto scaricato }
+        "400": { description: URL non valido }
+
+  /api/scraper/extract:
+    post:
+      summary: Estrai dati azienda da website (AI)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                website: { type: string }
+                companyId: { type: integer }
+              required: [website]
+      responses:
+        "200": { description: Dati estratti + aggiornati su DB se companyId fornito }
+        "400": { description: Validazione fallita }
+
+  /api/scraper/generate-email:
+    post:
+      summary: Genera bozza email per azienda via AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                companyId: { type: integer }
+              required: [companyId]
+      responses:
+        "200": { description: Bozza generata e salvata }
+        "422": { description: Blacklist o validazione fallita }
+
+  /api/cron/process-municipalities:
+    post:
+      summary: Avvia processamento comuni manualmente
+      responses:
+        "200": { description: Processato }
+        "409": { description: Già in esecuzione }
+
+  /api/cron/generate-emails:
+    post:
+      summary: Avvia generazione bozze email manualmente
+      responses:
+        "200": { description: Generato }
+        "409": { description: Già in esecuzione }
+
+  /api/cron/cleanup:
+    post:
+      summary: Pulizia aziende senza comune (più vecchi di 7gg)
+      responses:
+        "200": { description: Pulito }
+        "409": { description: Già in esecuzione }
+
+  /api/campaigns/send-batch:
+    post:
+      summary: Accoda aziende per invio batch email
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provincia: { type: string }
+                limit: { type: integer, minimum: 1, maximum: 200, default: 50 }
+                delay_seconds: { type: integer, minimum: 1, maximum: 60, default: 3 }
+      responses:
+        "200": { description: Accodati, processEmailQueue triggerato }
+
+  /api/campaigns/progress:
+    get:
+      summary: SSE con avanzamento invio batch
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/webhooks/listmonk:
+    post:
+      summary: Webhook da Listmonk (eventi email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                campaign_id: { type: integer }
+                subscriber_id: { type: integer }
+                event: { type: string, enum: [open, click, bounce] }
+      responses:
+        "200": { description: Evento processato }
+
+  /api/users:
+    post:
+      summary: Crea utente (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                surname: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                role: { type: string, enum: [superadmin, admin, collaboratore] }
+              required: [name, email]
+      responses:
+        "200": { description: Creato }
+        "409": { description: Email già registrata }
+
+  /api/users/{id}:
+    patch:
+      summary: Aggiorna ruolo/status utente (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [superadmin, admin, collaboratore] }
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        "200": { description: Aggiornato }
+
+  /api/admin/settings:
+    get:
+      summary: Elenco impostazioni (admin only)
+      responses:
+        "200": { description: JSON con tutte le settings }
+
+  /api/admin/settings/{key}:
+    put:
+      summary: Aggiorna impostazione (admin only)
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value: { type: string }
+      responses:
+        "200": { description: Aggiornata, SMTP riconfigurato se outreach_smtp_* }
+
+  /api/admin/diagnostics:
+    get:
+      summary: Stato servizi e code (admin only)
+      responses:
+        "200":
+          description: JSON con listmonk status, pending queue, audit recente
+
+  /admin/audit:
+    get:
+      summary: Log audit con filtri e paginazione (admin only)
+      parameters:
+        - { name: action, in: query, schema: { type: string } }
+        - { name: days, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+      responses:
+        "200":
+          description: Pagina HTML audit log
+
+  /dashboard:
+    get:
+      summary: Dashboard marketing con KPI, funnel, grafici
+      responses:
+        "200": { description: Pagina HTML dashboard }
+        "302": { description: Redirect a /login se non autenticato }
+
+  /metrics:
+    get:
+      summary: Metriche sistema (superadmin only)
+      responses:
+        "200":
+          description: JSON con conteggi aziende e memoria
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uptime: { type: integer }
+                  memory_mb: { type: integer }
+                  companies_total: { type: integer }
+                  emails_sent: { type: integer }
+        "403": { description: Non superadmin }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+security:
+  - cookieAuth: []

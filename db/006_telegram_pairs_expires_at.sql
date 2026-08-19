@@ -1,0 +1,1 @@
+ALTER TABLE telegram_pairs ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;

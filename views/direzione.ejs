@@ -1,0 +1,120 @@
+<div class="page-header">
+  <h1>Direzione Copy</h1>
+  <a href="/dashboard" class="btn btn-sm btn-secondary">← Dashboard</a>
+</div>
+
+<div class="card">
+<div id="direzioneWarning" style="display:none;margin-bottom:16px;padding:12px;background:#fef3c7;border-radius:8px;border:1px solid #f59e0b;font-size:13px;color:#92400e;">
+  Attenzione: modificando questi campi, le bozze già generate potrebbero non essere più coerenti.
+</div>
+  <form id="direzioneForm">
+    <div class="form-group">
+      <label>Info Azienda</label>
+      <textarea rows="6" name="info_azienda"><%= direzione.info_azienda || '' %></textarea>
+    </div>
+    <div class="form-group">
+      <label>CTA</label>
+      <input type="text" name="cta" value="<%= direzione.cta || '' %>">
+    </div>
+    <div class="form-group">
+      <label>Link CTA</label>
+      <input type="url" name="link_cta" value="<%= direzione.link_cta || '' %>">
+    </div>
+    <div class="form-group">
+      <label>Email Spunti (esempi email)</label>
+      <textarea rows="10" id="email_spunti" name="email_spunti" maxlength="50000"><%= direzione.email_spunti || '' %></textarea>
+      <span id="spuntiCount" style="font-size:12px;color:var(--text-secondary);"><%= (direzione.email_spunti||'').length %>/50000</span>
+    </div>
+    <div class="form-group">
+      <label>Email Template Bozza</label>
+      <textarea rows="10" id="email_template_bozza" name="email_template_bozza" maxlength="10000"><%= direzione.email_template_bozza || '' %></textarea>
+      <span id="templateCount" style="font-size:12px;color:var(--text-secondary);"><%= (direzione.email_template_bozza||'').length %>/10000</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button type="button" class="btn btn-sm btn-secondary js-show-preview">Anteprima template</button>
+    </div>
+    <div id="templatePreview" style="display:none;margin-top:12px;padding:16px;background:var(--bg-body);border-radius:8px;border:1px solid var(--border);white-space:pre-wrap;font-size:14px;max-height:400px;overflow-y:auto;"></div>
+    <div class="form-group">
+      <label>Correzione Prompt <small>(istruzioni aggiuntive per l'AI che modificano il comportamento del copywriter)</small></label>
+      <textarea rows="4" name="correzione_prompt"><%= direzione.correzione_prompt || '' %></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="margin-top: 16px;">Salva tutto</button>
+  </form>
+</div>
+
+
+
+<script>
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+document.getElementById('direzioneForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Salvataggio...';
+
+  if (!document.querySelector('[name="info_azienda"]').value.trim()) {
+    alert('Il campo Info Azienda è obbligatorio per generare email. Compilalo prima di salvare.');
+    btn.disabled = false;
+    btn.textContent = 'Salva tutto';
+    return;
+  }
+  try {
+    const res = await fetch('/api/direzione', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.success) {
+      showToast('Configurazione salvata');
+    } else {
+      showToast('Errore: ' + (result.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Salva';
+});
+fetch('/api/direzione/draft-count').then(r => r.json()).then(d => {
+  if (d.count > 0) {
+    const warn = document.getElementById('direzioneWarning');
+    warn.textContent = `Attenzione: modificando questi campi, ${d.count} bozze già generate potrebbero non essere più coerenti.`;
+    warn.style.display = 'block';
+  }
+}).catch(() => {});
+
+function showPreview() {
+  const info = document.querySelector('textarea[name="info_azienda"]')?.value || '';
+  const cta = document.querySelector('input[name="cta"]')?.value || '';
+  const ctaLink = document.querySelector('input[name="link_cta"]')?.value || '';
+  const template = document.querySelector('textarea[name="email_template_bozza"]')?.value || '';
+  const spunti = document.querySelector('textarea[name="email_spunti"]')?.value || '';
+
+  let preview = 'ESEMPIO DI EMAIL (anteprima letterale)\n\n';
+  preview += '=== INFO AZIENDA ===\n' + info + '\n\n';
+  preview += '=== TEMPLATE ===\n' + template + '\n\n';
+  preview += '=== CTA ===\n' + cta + ' → ' + ctaLink + '\n\n';
+  if (spunti) preview += '=== SPUNTI ===\n' + spunti + '\n';
+
+  const el = document.getElementById('templatePreview');
+  el.textContent = preview;
+  el.style.display = 'block';
+}
+
+document.getElementById('email_spunti').addEventListener('input', function() {
+  document.getElementById('spuntiCount').textContent = this.value.length + '/50000';
+});
+document.getElementById('email_template_bozza').addEventListener('input', function() {
+  document.getElementById('templateCount').textContent = this.value.length + '/10000';
+});
+document.querySelector('.js-show-preview')?.addEventListener('click', showPreview);
+</script>

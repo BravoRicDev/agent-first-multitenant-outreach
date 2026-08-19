@@ -1,0 +1,344 @@
+<div class="page-header">
+  <h1><%= t('nav.today') %></h1>
+  <span style="font-size:14px;color:var(--text-secondary);">
+    <span id="todayDate"></span>
+  </span>
+</div>
+
+<!-- Semaforo + progresso -->
+<div style="display:flex;gap:16px;margin-bottom:16px;align-items:stretch;">
+  <div id="semaphoreCard" style="flex:0 0 80px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-card);border-radius:12px;box-shadow:var(--shadow);padding:16px;">
+    <div id="semaphoreLight" style="width:48px;height:48px;border-radius:50%;background:#d1d5db;transition:background 0.3s;"></div>
+    <span id="semaphoreLabel" style="font-size:11px;color:var(--text-secondary);margin-top:6px;font-weight:500;">Caricamento...</span>
+  </div>
+  <div id="progressCard" style="flex:1;background:var(--bg-card);border-radius:12px;box-shadow:var(--shadow);padding:20px 24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:14px;font-weight:500;color:var(--text-secondary);">Email inviate oggi</span>
+      <span id="progressCount" style="font-size:24px;font-weight:700;background:var(--brand-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">0</span>
+    </div>
+    <div style="height:24px;background:var(--bg-body);border-radius:12px;overflow:hidden;position:relative;">
+      <div id="progressBar" style="height:100%;width:0%;background:var(--brand-gradient);border-radius:12px;transition:width 1s ease;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text-secondary);">
+      <span id="progressSent">0 inviate</span>
+      <span id="progressTotal">0 totali</span>
+    </div>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+  <div class="kpi-card" style="padding:14px;border-top:3px solid var(--brand-primary);">
+    <div class="kpi-value" style="font-size:26px;" id="kpiInviate">—</div>
+    <div class="kpi-label">Inviate oggi</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;border-top:3px solid #3b82f6;">
+    <div class="kpi-value" style="font-size:26px;" id="kpiAperte">—</div>
+    <div class="kpi-label">Aperte oggi</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;border-top:3px solid #10b981;">
+    <div class="kpi-value" style="font-size:26px;" id="kpiCliccate">—</div>
+    <div class="kpi-label">Cliccate oggi</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;border-top:3px solid var(--danger);">
+    <div class="kpi-value" style="font-size:26px;color:var(--danger);-webkit-text-fill-color:var(--danger);background:none;" id="kpiFallite">—</div>
+    <div class="kpi-label">Non recapitate</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;border-top:3px solid #f59e0b;">
+    <div class="kpi-value" style="font-size:26px;" id="kpiCoda">—</div>
+    <div class="kpi-label">In coda</div>
+  </div>
+  <div class="kpi-card" style="padding:14px;border-top:3px solid #8b5cf6;">
+    <div class="kpi-value" style="font-size:26px;" id="kpiDaApprovare">—</div>
+    <div class="kpi-label">Da approvare</div>
+  </div>
+</div>
+
+<!-- Alert section -->
+<div id="alertContainer" style="margin-bottom:16px;"></div>
+
+<!-- Funnel e attività -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+  <!-- Funnel -->
+  <div class="card">
+    <h3 style="margin-bottom:16px;font-size:15px;">Imbuto campagne</h3>
+    <div id="funnelContainer">
+      <div style="padding:20px 0;text-align:center;color:var(--text-secondary);font-size:13px;">Caricamento...</div>
+    </div>
+  </div>
+
+  <!-- Attività recenti -->
+  <div class="card">
+    <h3 style="margin-bottom:16px;font-size:15px;">Ultime attività</h3>
+    <div id="recentActivities">
+      <div style="padding:20px 0;text-align:center;color:var(--text-secondary);font-size:13px;">Caricamento...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Campagne attive + Cron -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+  <div class="card">
+    <h3 style="margin-bottom:12px;font-size:15px;">📬 Campagne attive</h3>
+    <div id="campaignsList">
+      <div style="padding:12px 0;color:var(--text-secondary);font-size:13px;">Caricamento...</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:12px;font-size:15px;">⚙️ Stato servizi</h3>
+    <div id="cronStatus">
+      <div style="padding:12px 0;color:var(--text-secondary);font-size:13px;">Caricamento...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let refreshInterval;
+
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return '—';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'ora';
+  if (mins < 60) return mins + 'm fa';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h fa';
+  return new Date(dateStr).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch('/api/today/stats');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // ── Data oggi ──
+    document.getElementById('todayDate').textContent = new Date().toLocaleDateString('it-IT', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+
+    // ── Semaforo ──
+    const semColors = { green: '#10b981', yellow: '#f59e0b', red: '#ef4444' };
+    const semLabels = { green: 'Tutto ok ✓', yellow: 'Qualche attenzione', red: 'Problemi!' };
+    const sem = data.semaphore || 'green';
+    document.getElementById('semaphoreLight').style.background = semColors[sem];
+    document.getElementById('semaphoreLabel').textContent = semLabels[sem];
+
+    // ── Barra progresso ──
+    const inviate = data.today?.inviate || 0;
+    const totali = data.today?.totaliPianificati || 0;
+    const progresso = data.today?.progresso || 0;
+    document.getElementById('progressCount').textContent = inviate;
+    document.getElementById('progressSent').textContent = inviate + ' inviate';
+    document.getElementById('progressTotal').textContent = totali + ' totali (in coda)';
+    document.getElementById('progressBar').style.width = Math.min(progresso, 100) + '%';
+
+    // ── KPI ──
+    document.getElementById('kpiInviate').textContent = inviate;
+    document.getElementById('kpiAperte').textContent = data.today?.aperte || 0;
+    document.getElementById('kpiCliccate').textContent = data.today?.cliccate || 0;
+    document.getElementById('kpiFallite').textContent = data.today?.fallite || 0;
+    document.getElementById('kpiCoda').textContent = data.today?.inCoda || 0;
+    document.getElementById('kpiDaApprovare').textContent = data.today?.daApprovare || 0;
+
+    // ── Alert ──
+    const alertContainer = document.getElementById('alertContainer');
+    if (data.alerts && data.alerts.length > 0) {
+      alertContainer.innerHTML = data.alerts.map(a => `
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:8px;border-radius:10px;
+          ${a.type === 'danger' ? 'background:#fef2f2;border:1px solid #fecaca;' : 'background:#fffbeb;border:1px solid #fde68a;'}"
+        >
+          <span style="font-size:18px;">${a.icon}</span>
+          <span style="font-size:14px;font-weight:500;color:${a.type === 'danger' ? '#991b1b' : '#92400e'};">${a.text}</span>
+        </div>
+      `).join('');
+    } else {
+      alertContainer.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;">
+          <span style="font-size:18px;">✅</span>
+          <span style="font-size:14px;font-weight:500;color:#166534;">Tutto nella norma — nessun problema</span>
+        </div>
+      `;
+    }
+
+    // ── Funnel (inviate → aperte → cliccate) ──
+    const funnelContainer = document.getElementById('funnelContainer');
+    const aperte = data.today?.aperte || 0;
+    const cliccate = data.today?.cliccate || 0;
+    const inv = inviate || 1;
+    const openPct = Math.round((aperte / inv) * 100);
+    const clickPct = Math.round((cliccate / inv) * 100);
+
+    funnelContainer.innerHTML = `
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+          <span>📨 Inviate</span><span><strong>${inviate}</strong></span>
+        </div>
+        <div style="height:28px;background:var(--bg-body);border-radius:6px;overflow:hidden;">
+          <div style="height:100%;width:100%;background:linear-gradient(90deg,#6366f1,#4f46e5);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:500;">${inviate}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+          <span>👁 Aperte</span><span><strong>${aperte}</strong> (${openPct}%)</span>
+        </div>
+        <div style="height:28px;background:var(--bg-body);border-radius:6px;overflow:hidden;">
+          <div style="height:100%;width:${openPct}%;background:linear-gradient(90deg,#3b82f6,#2563eb);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:500;${openPct < 15 ? 'justify-content:flex-start;padding-left:8px;' : ''}">${aperte}</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+          <span>🔗 Cliccate</span><span><strong>${cliccate}</strong> (${clickPct}%)</span>
+        </div>
+        <div style="height:28px;background:var(--bg-body);border-radius:6px;overflow:hidden;">
+          <div style="height:100%;width:${clickPct}%;background:linear-gradient(90deg,#10b981,#059669);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:500;${clickPct < 15 ? 'justify-content:flex-start;padding-left:8px;' : ''}">${cliccate}</div>
+        </div>
+      </div>
+    `;
+
+    // ── Attività recenti ──
+    const recentEl = document.getElementById('recentActivities');
+    const risposte = data.ultimeRisposte || [];
+    const inviiCampagne = data.inviiPerCampagna || [];
+
+    let activitiesHtml = '';
+    const aziendeFalliti = data.aziendeFalliti || [];
+    if (aziendeFalliti.length > 0) {
+      activitiesHtml += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">❌ Aziende con invio fallito</div>';
+      aziendeFalliti.forEach(d => {
+        activitiesHtml += `
+          <a href="/campaigns?search=${encodeURIComponent(d.nomeStudio)}" style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;text-decoration:none;color:var(--text-primary);">
+            <span style="font-size:10px;width:10px;color:#ef4444;">●</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.nomeStudio || 'Sconosciuto')}</div>
+              <div style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(d.email)} — ${escapeHtml(d.ultimoErrore || 'Errore sconosciuto')}</div>
+            </div>
+            <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap;">${d.tentativi}x</span>
+          </a>
+        `;
+      });
+      if (risposte.length > 0 || inviiCampagne.length > 0) activitiesHtml += '<div style="margin-top:10px;"></div>';
+    }
+    if (risposte.length > 0) {
+      activitiesHtml += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">📩 Risposte ricevute</div>';
+      risposte.forEach(r => {
+        activitiesHtml += `
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+            <span style="font-size:10px;width:10px;color:#10b981;">●</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.nomeStudio || 'Sconosciuto')}</div>
+              <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.oggetto || '(nessun oggetto)')}</div>
+            </div>
+            <span style="font-size:11px;color:var(--text-secondary);white-space:nowrap;">${formatTimeAgo(r.repliedAt)}</span>
+          </div>
+        `;
+      });
+    }
+
+    if (inviiCampagne.length > 0) {
+      if (activitiesHtml) activitiesHtml += '<div style="margin-top:10px;"></div>';
+      activitiesHtml += '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">📨 Invii per campagna</div>';
+      inviiCampagne.forEach(c => {
+        activitiesHtml += `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border);">
+            <span>📧 ${escapeHtml(c.nome)}</span>
+            <span style="font-weight:600;">${c.count}</span>
+          </div>
+        `;
+      });
+    }
+
+    if (!activitiesHtml) {
+      activitiesHtml = '<div style="padding:12px 0;text-align:center;color:var(--text-secondary);font-size:13px;">Nessuna attività oggi</div>';
+    }
+    recentEl.innerHTML = activitiesHtml;
+
+    // ── Campagne attive ──
+    const campaignsEl = document.getElementById('campaignsList');
+    if (data.campagnaAttiva) {
+      const c = data.campagnaAttiva;
+      campaignsEl.innerHTML = `
+        <a href="/campaigns/${c.id}/workflow" style="display:flex;align-items:center;gap:10px;padding:10px 0;text-decoration:none;color:var(--text-primary);border-bottom:1px solid var(--border);">
+          <span style="font-size:14px;">▶</span>
+          <span style="font-weight:500;">${escapeHtml(c.name)}</span>
+          <span style="font-size:11px;color:var(--text-secondary);margin-left:auto;">Apri →</span>
+        </a>
+      `;
+    } else {
+      campaignsEl.innerHTML = '<div style="padding:8px 0;color:var(--text-secondary);font-size:13px;">Nessuna campagna attiva</div>';
+    }
+    if (data.inviiPerCampagna && data.inviiPerCampagna.length > 0) {
+      let extra = '';
+      data.inviiPerCampagna.forEach(c => {
+        extra += `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
+            <span>${escapeHtml(c.nome)}</span>
+            <span style="font-weight:500;">${c.count} invii oggi</span>
+          </div>
+        `;
+      });
+      if (extra) {
+        campaignsEl.innerHTML += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text-secondary);font-weight:600;">Invii oggi:</div>${extra}`;
+      }
+    }
+
+    // ── Stato servizi ──
+    const cronEl = document.getElementById('cronStatus');
+    const jobs = data.cronJobs || [];
+    if (jobs.length > 0) {
+      const jobNames = {
+        municipality: 'Scraping comuni',
+        emailDraft: 'Generazione bozze',
+        emailQueue: 'Invio email',
+        followUp: 'Follow-up',
+        cleanup: 'Pulizia',
+        retryFailed: 'Ritentativi',
+        cmsSync: 'Sync CMS',
+        smtpReset: 'Reset contatori',
+      };
+      let html = '';
+      jobs.slice(0, 8).forEach(j => {
+        const label = jobNames[j.nome] || j.nome;
+        const hasError = !!j.errore;
+        html += `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border);">
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:8px;color:${hasError ? 'var(--danger)' : '#10b981'};">●</span>
+              ${label}
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:var(--text-secondary);">${formatTimeAgo(j.ultimaEsecuzione)}</span>
+              ${hasError ? '<span title="' + escapeAttr(j.errore) + '" style="font-size:13px;cursor:help;">⚠️</span>' : ''}
+            </div>
+          </div>
+        `;
+      });
+      cronEl.innerHTML = html;
+    } else {
+      cronEl.innerHTML = '<div style="padding:8px 0;color:var(--text-secondary);font-size:13px;">Dati non disponibili</div>';
+    }
+
+  } catch (err) {
+    console.error('Today stats error:', err);
+    document.getElementById('progressCount').textContent = '!';
+    document.getElementById('alertContainer').innerHTML = `
+      <div style="padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;">🔴</span>
+        <span style="font-size:14px;color:#991b1b;font-weight:500;">Errore caricamento dati. La pagina si aggiornerà tra 30 secondi.</span>
+      </div>
+    `;
+  }
+}
+
+// Auto-refresh ogni 30 secondi
+document.addEventListener('DOMContentLoaded', function() {
+  loadStats();
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(loadStats, 30000);
+});
+</script>

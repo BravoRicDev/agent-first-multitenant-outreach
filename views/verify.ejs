@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verifica | <%= brand.name %></title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg-body: #f8fafc; --bg-card: #ffffff; --brand-gradient: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); --brand-primary: #4f46e5; --text-main: #1e293b; --text-sub: #64748b; --border-color: #e2e8f0; --radius: 24px; --shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+    body { font-family: 'Poppins', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 320px; background: linear-gradient(to bottom, #e0e7ff 0%, transparent 100%); z-index: 0; }
+    .wrapper { position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 20px; }
+    .card { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 40px 30px; text-align: center; border: 1px solid var(--border-color); }
+    .logo { font-size: 28px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(135deg, #6366f1, #4338ca); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    h1 { font-size: 22px; font-weight: 700; margin: 0 0 8px; }
+    p { color: var(--text-sub); font-size: 14px; margin: 0 0 28px; }
+    input[type="text"] { width: 100%; padding: 14px 16px; border: 2px solid var(--border-color); border-radius: 12px; font-family: inherit; font-size: 24px; text-align: center; letter-spacing: 8px; transition: border-color 0.2s; box-sizing: border-box; }
+    input[type="text"]:focus { outline: none; border-color: var(--brand-primary); }
+    button { width: 100%; margin-top: 14px; padding: 14px; border: none; border-radius: 14px; background: var(--brand-gradient); color: #fff; font-family: inherit; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.2s; }
+    button:hover { transform: translateY(-2px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .msg { padding: 12px 16px; border-radius: 12px; font-size: 13px; margin-top: 16px; display: none; }
+    .msg-error { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+    footer { margin-top: 24px; font-size: 12px; color: #94a3b8; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card">
+    <div class="logo"><%= brand.name %></div>
+    <h1><%= t('auth.verify.title') %></h1>
+    <p><%= t('auth.verify.subtitle') %></p>
+    <input type="text" id="otp" maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]*" autofocus>
+    <button type="button" id="verifyBtn"><%= t('auth.verify.submit') %></button>
+    <div id="msg" class="msg"></div>
+    <div id="timerDisplay" style="margin-top:12px;font-size:13px;color:#64748b;">
+      <%= t('auth.verify.countdown') %> <span id="countdown">15:00</span>
+    </div>
+  </div>
+  <footer><%= brand.name %></footer>
+</div>
+<script>
+const TOKEN = <%- JSON.stringify(token).replace(/<\//g, '<\\/') %>;
+async function verifyOtp() {
+  const btn = document.getElementById('verifyBtn');
+  const msg = document.getElementById('msg');
+  const otp = document.getElementById('otp').value.trim();
+  if (otp.length !== 6) {
+    msg.className = 'msg msg-error'; msg.textContent = '<%= t("auth.verify.inserisci_6") %>'; msg.style.display = 'block';
+    return;
+  }
+  btn.disabled = true; btn.textContent = '<%= t("auth.verify.verificazione") %>'; msg.style.display = 'none';
+  try {
+    const res = await fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: TOKEN, otp }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = data.redirect || '/dashboard';
+    } else {
+      msg.className = 'msg msg-error'; msg.textContent = data.error || '<%= t("auth.verify.codice_non_valido") %>'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = '<%= t("auth.verify.submit") %>';
+    }
+  } catch(err) {
+    msg.className = 'msg msg-error'; msg.textContent = '<%= t("auth.verify.errore_connessione") %>'; msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = '<%= t("auth.verify.submit") %>';
+  }
+}
+document.getElementById('verifyBtn').addEventListener('click', verifyOtp);
+document.getElementById('otp').addEventListener('input', function() {
+  if (this.value.length === 6) verifyOtp();
+});
+(function() {
+  var urlParams = new URLSearchParams(window.location.search);
+  var tokenFromUrl = urlParams.get('token');
+  if (tokenFromUrl && tokenFromUrl.length > 10) {
+    document.getElementById('verifyBtn').textContent = '<%= t("auth.verify.auto") %>';
+    verifyOtp();
+  }
+})();
+(function() {
+  var _expiresMs = <%- expiresAt ? `new Date("${expiresAt.toISOString()}").getTime()` : (Date.now() + 15 * 60 * 1000) %>;
+  const expiresAt = new Date(_expiresMs);
+  const el = document.getElementById('countdown');
+  const parent = document.getElementById('timerDisplay');
+  if (!el) return;
+  function tick() {
+    var diff = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+    el.textContent = Math.floor(diff / 60).toString().padStart(2, '0') + ':' + (diff % 60).toString().padStart(2, '0');
+    if (diff <= 0) {
+      el.textContent = '<%= t("auth.verify.expired") %>';
+      parent.style.color = 'var(--danger)';
+      return;
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+ALTER TABLE email_sequences ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0;

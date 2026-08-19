@@ -1,0 +1,2 @@
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS footer_text TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS footer_html TEXT;

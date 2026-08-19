@@ -1,0 +1,328 @@
+<div class="page-header">
+  <h1>Account SMTP</h1>
+  <div style="display:flex;gap:8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <button class="btn btn-sm btn-primary" id="addAccountBtn">+ Aggiungi account</button>
+    <button class="btn btn-sm btn-secondary" id="refreshAccountsBtn">Aggiorna</button>
+  </div>
+</div>
+
+<div class="card" id="addForm" style="display:none;">
+  <h3 style="margin-bottom:16px;" id="formTitle">Nuovo account SMTP</h3>
+  <form id="smtpForm">
+    <input type="hidden" id="editId" value="">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group"><label>Nome *</label><input name="name" required placeholder="Outreach 1"></div>
+      <div class="form-group"><label>Host SMTP *</label><input name="smtp_host" required placeholder="smtp.example.com"></div>
+      <div class="form-group"><label>Porta</label><input name="smtp_port" type="number" value="465"></div>
+      <div class="form-group"><label>Utente SMTP *</label><input name="smtp_user" required></div>
+      <div class="form-group"><label>Password SMTP *</label><input name="smtp_pass" type="password" id="smtp_pass_input" placeholder="Inserisci per cambiarla"></div>
+      <div class="form-group"><label>From Email *</label><input name="from_email" type="email" required></div>
+      <div class="form-group"><label>From Name</label><input name="from_name" value="<%= brand.defaultFromName %>"></div>
+      <div class="form-group"><label>Limite giornaliero</label><input name="daily_limit" type="number" value="100"></div>
+    </div>
+    <h4 style="margin:12px 0 8px;">IMAP (per rilevamento risposte)</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group"><label>Host IMAP</label><input name="imap_host" placeholder="imap.example.com"></div>
+      <div class="form-group"><label>Porta IMAP</label><input name="imap_port" type="number" value="993"></div>
+      <div class="form-group"><label>Utente IMAP</label><input name="imap_user"></div>
+      <div class="form-group"><label>Password IMAP</label><input name="imap_pass" type="password"></div>
+    </div>
+    <h4 style="margin:12px 0 8px;">Firma email</h4>
+    <div class="form-group" style="grid-column:1/-1;">
+      <label>Firma (testo) <small>— viene aggiunta in fondo a ogni email</small></label>
+      <textarea name="firma_testo" rows="4" style="width:100%;" placeholder="--&#10;Mario Rossi&#10;Account Manager&#10;<%= brand.name %>"></textarea>
+    </div>
+    <div class="form-group" style="grid-column:1/-1;">
+      <label>Firma (HTML) <small>— usata se l'email è in formato HTML</small></label>
+      <textarea name="firma_html" rows="4" style="width:100%;" placeholder="&lt;p&gt;--&lt;br&gt;&lt;strong&gt;Mario Rossi&lt;/strong&gt;"></textarea>
+      <button type="button" class="btn btn-sm btn-secondary" id="previewFirmaBtn">👁 Anteprima</button>
+      <div id="firmaPreview" style="display:none;margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:14px;"></div>
+    </div>
+    <h4 style="margin:12px 0 8px;">Piano riscaldamento (warming)</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="warming_enabled" value="true"> Attiva warming
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Limite iniziale</label>
+        <input name="warming_start_limit" type="number" value="20">
+      </div>
+      <div class="form-group">
+        <label>Incremento giornaliero</label>
+        <input name="warming_increment" type="number" value="20">
+      </div>
+      <div class="form-group">
+        <label>Limite massimo</label>
+        <input name="warming_max_limit" type="number" value="200">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button type="submit" class="btn btn-primary">Salva</button>
+      <button type="button" class="btn btn-secondary" id="cancelAddFormBtn">Annulla</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" id="accountsList"><p style="color:var(--text-secondary)">Caricamento in corso...</p></div>
+
+<!-- Test email modal -->
+<div id="testModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:12px;max-width:500px;width:90%;padding:24px;">
+    <h3 style="margin-bottom:4px;">Invia email di test</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;" id="testModalAccount">Account: —</p>
+    <input type="hidden" id="testAccountId" value="">
+    <div class="form-group">
+      <label>Destinatario *</label>
+      <input type="email" id="testTo" required style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;box-sizing:border-box;">
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label>Oggetto</label>
+      <input type="text" id="testSubject" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;box-sizing:border-box;">
+    </div>
+    <div class="form-group" style="margin-top:12px;">
+      <label>Messaggio</label>
+      <textarea id="testText" rows="5" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>
+    </div>
+    <div id="testResult" style="margin-top:8px;font-size:13px;display:none;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn btn-primary" id="sendTestBtn">📧 Invia test</button>
+      <button class="btn btn-secondary" id="closeTestModalBtn">Annulla</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadAccounts() {
+  const el = document.getElementById('accountsList');
+  el.innerHTML = '<p style="color:var(--text-secondary)">Caricamento...</p>';
+  try {
+    const res = await fetch('/api/admin/smtp-accounts');
+    const accounts = await res.json();
+    if (accounts.length === 0) {
+      el.innerHTML = '<div class="empty-state"><h3>Nessun account SMTP</h3><p>Aggiungi il primo account per iniziare.</p></div>';
+      return;
+    }
+    let html = '<div style="overflow-x:auto;"><table><thead><tr><th>Nome</th><th>Host</th><th>Inviate oggi</th><th>Limite</th><th>Bounce</th><th>Statistiche</th><th>Round Robin</th><th>IMAP</th><th>Attivo</th><th>Azioni</th></tr></thead><tbody>';
+    accounts.forEach(a => {
+      const pct = a.daily_limit > 0 ? Math.round(a.sent_today / a.daily_limit * 100) : 0;
+      html += `<tr>
+        <td><strong>${a.name}</strong></td>
+        <td>${a.smtp_host}</td>
+        <td>${a.sent_today} / ${a.daily_limit} <div style="height:6px;background:var(--bg-body);border-radius:3px;margin-top:4px;"><div style="height:100%;background:${pct>80?'var(--danger)':pct>50?'var(--warning)':'var(--success)'};border-radius:3px;width:${pct}%"></div></div></td>
+        <td>${a.daily_limit}</td>
+        <td>${a.bounce_count || 0}</td>
+        <td><button class="btn btn-sm btn-secondary smtp-stats-btn" data-id="${a.id}">📊</button><div id="smtpStats_${a.id}" style="display:none;font-size:11px;color:var(--text-secondary);"></div></td>
+        <td>Pos. ${a.rr_position}</td>
+        <td>${a.imap_host ? '<span class="badge badge-success">Sì</span>' : '<span class="badge badge-warning">No</span>'}</td>
+        <td><input type="checkbox" ${a.is_active?'checked':''} data-id="${a.id}"></td>
+        <td>
+          <a href="/admin/imap/${a.id}" class="btn btn-sm btn-secondary" title="Visualizza posta" style="text-decoration:none;">📬</a>
+          <button class="btn btn-sm btn-secondary edit-account-btn" data-id="${a.id}" title="Modifica">✏️</button>
+          <button class="btn btn-sm btn-secondary test-account-btn" data-id="${a.id}" data-name="${a.name}" title="Invia email di test">📧</button>
+          <button class="btn btn-sm btn-danger delete-account-btn" data-id="${a.id}" title="Elimina">🗑</button>
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  } catch {
+    el.innerHTML = '<p style="color:var(--danger)">Errore caricamento</p>';
+  }
+}
+
+let editingId = null;
+
+async function saveAccount(e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(e.target));
+  if (!data.smtp_port) data.smtp_port = '465';
+  if (!data.daily_limit) data.daily_limit = '100';
+  if (!data.imap_port) data.imap_port = '993';
+  if (editingId && !data.smtp_pass) { delete data.smtp_pass; }
+  if (editingId && !data.imap_pass) { delete data.imap_pass; }
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true; btn.textContent = 'Salvataggio...';
+  try {
+    const url = editingId
+      ? '/api/admin/smtp-accounts/' + editingId
+      : '/api/admin/smtp-accounts';
+    const method = editingId ? 'PATCH' : 'POST';
+    const res = await fetch(url, {
+      method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.success) showToast('Account salvato');
+    else showToast('Errore', 'error');
+  } catch { showToast('Errore di connessione', 'error'); }
+  document.getElementById('addForm').style.display = 'none';
+  document.getElementById('smtpForm').reset();
+  document.getElementById('editId').value = '';
+  editingId = null;
+  document.getElementById('formTitle').textContent = 'Nuovo account SMTP';
+  btn.disabled = false; btn.textContent = 'Salva';
+  loadAccounts();
+}
+
+async function toggleActive(id, active) {
+  try {
+    await fetch(`/api/admin/smtp-accounts/${id}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({is_active: active})
+    });
+  } catch {}
+}
+
+async function deleteAccount(id) {
+  if (!confirm('Eliminare questo account SMTP?')) return;
+  try {
+    await fetch(`/api/admin/smtp-accounts/${id}`, { method: 'DELETE' });
+    showToast('Account eliminato');
+    loadAccounts();
+  } catch { showToast('Errore', 'error'); }
+}
+
+async function editAccount(id) {
+  try {
+    const res = await fetch('/api/admin/smtp-accounts/' + id);
+    const a = await res.json();
+    document.getElementById('editId').value = id;
+    editingId = id;
+    document.getElementById('formTitle').textContent = 'Modifica account SMTP';
+    document.querySelector('[name="name"]').value = a.name || '';
+    document.querySelector('[name="smtp_host"]').value = a.smtp_host || '';
+    document.querySelector('[name="smtp_port"]').value = a.smtp_port || 465;
+    document.querySelector('[name="smtp_user"]').value = a.smtp_user || '';
+    document.querySelector('[name="smtp_pass"]').value = '';
+    document.querySelector('[name="smtp_pass"]').required = false;
+    document.querySelector('[name="from_email"]').value = a.from_email || '';
+    document.querySelector('[name="from_name"]').value = a.from_name || '';
+    document.querySelector('[name="daily_limit"]').value = a.daily_limit || 100;
+    document.querySelector('[name="imap_host"]').value = a.imap_host || '';
+    document.querySelector('[name="imap_port"]').value = a.imap_port || 993;
+    document.querySelector('[name="imap_user"]').value = a.imap_user || '';
+    document.querySelector('[name="imap_pass"]').value = '';
+    document.querySelector('[name="firma_testo"]').value = a.firma_testo || '';
+    document.querySelector('[name="firma_html"]').value = a.firma_html || '';
+    if (a.warming_enabled) document.querySelector('[name="warming_enabled"]').checked = true;
+    document.querySelector('[name="warming_start_limit"]').value = a.warming_start_limit || 20;
+    document.querySelector('[name="warming_increment"]').value = a.warming_increment || 20;
+    document.querySelector('[name="warming_max_limit"]').value = a.warming_max_limit || 200;
+    document.getElementById('addForm').style.display = 'block';
+  } catch { showToast('Errore caricamento account', 'error'); }
+}
+
+function testAccount(id) {
+  var btn = document.querySelector('.test-account-btn[data-id="' + id + '"]');
+  var name = btn ? btn.dataset.name : 'ID ' + id;
+  document.getElementById('testAccountId').value = id;
+  document.getElementById('testModalAccount').textContent = 'Account: ' + name;
+  document.getElementById('testTo').value = '';
+  document.getElementById('testSubject').value = '';
+  document.getElementById('testText').value = '';
+  document.getElementById('testResult').style.display = 'none';
+  document.getElementById('testModal').style.display = 'flex';
+}
+
+async function sendTestEmail() {
+  const id = document.getElementById('testAccountId').value;
+  const to = document.getElementById('testTo').value.trim();
+  const subject = document.getElementById('testSubject').value.trim();
+  const text = document.getElementById('testText').value.trim();
+  if (!to) { showToast('Inserisci un destinatario', 'error'); return; }
+  const btn = document.getElementById('sendTestBtn');
+  btn.disabled = true; btn.textContent = 'Invio...';
+  document.getElementById('testResult').style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/smtp-accounts/' + id + '/test-send', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ to, subject, text })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('testResult').style.display = 'block';
+      document.getElementById('testResult').innerHTML = '<span style="color:var(--success)">✅ Email inviata con successo!</span>';
+      showToast('📧 Email di test inviata!');
+    } else {
+      document.getElementById('testResult').style.display = 'block';
+      document.getElementById('testResult').innerHTML = '<span style="color:var(--danger)">❌ ' + (data.error || 'Errore') + '</span>';
+      showToast('❌ ' + (data.error || 'Errore'), 'error');
+    }
+  } catch {
+    document.getElementById('testResult').style.display = 'block';
+    document.getElementById('testResult').innerHTML = '<span style="color:var(--danger)">❌ Errore di connessione</span>';
+    showToast('Errore di connessione', 'error');
+  }
+  btn.disabled = false; btn.textContent = '📧 Invia test';
+}
+
+function showAddForm() {
+  document.getElementById('smtpForm').reset();
+  document.getElementById('editId').value = '';
+  editingId = null;
+  document.getElementById('formTitle').textContent = 'Nuovo account SMTP';
+  document.querySelector('[name="smtp_pass"]').required = true;
+  document.getElementById('addForm').style.display='block';
+}
+loadAccounts();
+
+function previewFirma() {
+  var testo = document.querySelector('[name="firma_testo"]')?.value || '';
+  var html = document.querySelector('[name="firma_html"]')?.value || '';
+  var div = document.getElementById('firmaPreview');
+  div.style.display = 'block';
+  if (html) {
+    div.innerHTML = '<strong>HTML:</strong><div style="margin-top:8px;">' + html + '</div>';
+  } else {
+    div.innerHTML = '<strong>Testo:</strong><pre style="margin-top:8px;white-space:pre-wrap;font-family:inherit;">' + testo + '</pre>';
+  }
+}
+
+async function loadSmtpStats(id, btn) {
+  var div = document.getElementById('smtpStats_' + id);
+  if (div.style.display !== 'none') { div.style.display = 'none'; return; }
+  try {
+    var res = await fetch('/api/admin/smtp-accounts/' + id + '/stats');
+    var data = await res.json();
+    div.innerHTML = '7gg: ' + (data.sent_7d || 0) + ' inv. / ' + (data.bounced_7d || 0) + ' bounce<br>Totale: ' + (data.sent_total || 0);
+    div.style.display = 'block';
+  } catch(e) { div.innerHTML = 'Errore'; div.style.display = 'block'; }
+}
+
+document.getElementById('addAccountBtn').addEventListener('click', showAddForm);
+document.getElementById('refreshAccountsBtn').addEventListener('click', loadAccounts);
+document.getElementById('smtpForm').addEventListener('submit', saveAccount);
+document.getElementById('previewFirmaBtn').addEventListener('click', previewFirma);
+document.getElementById('cancelAddFormBtn').addEventListener('click', function() {
+  document.getElementById('addForm').style.display = 'none';
+});
+document.getElementById('sendTestBtn').addEventListener('click', sendTestEmail);
+document.getElementById('closeTestModalBtn').addEventListener('click', function() {
+  document.getElementById('testModal').style.display = 'none';
+});
+document.getElementById('testModal').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
+document.getElementById('accountsList').addEventListener('click', function(e) {
+  var btn = e.target.closest('button');
+  if (!btn) return;
+  if (btn.classList.contains('smtp-stats-btn')) {
+    loadSmtpStats(+btn.dataset.id, btn);
+  } else if (btn.classList.contains('delete-account-btn')) {
+    deleteAccount(+btn.dataset.id);
+  } else if (btn.classList.contains('edit-account-btn')) {
+    editAccount(+btn.dataset.id);
+  } else if (btn.classList.contains('test-account-btn')) {
+    testAccount(+btn.dataset.id);
+  }
+});
+
+document.getElementById('accountsList').addEventListener('change', function(e) {
+  if (e.target.matches('input[type="checkbox"][data-id]')) {
+    toggleActive(+e.target.dataset.id, e.target.checked);
+  }
+});
+</script>

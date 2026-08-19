@@ -1,0 +1,81 @@
+<div class="page-header">
+  <h1>Stato Sistema</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <span id="globalStatus" style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;">Caricamento...</span>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card" id="queueStatus"><div class="kpi-value">...</div><div class="kpi-label">Coda Email</div></div>
+  <div class="kpi-card" id="memoryStatus"><div class="kpi-value">...</div><div class="kpi-label">Memoria</div></div>
+  <div class="kpi-card" id="uptimeStatus"><div class="kpi-value">...</div><div class="kpi-label">Uptime</div></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:16px;">Stato Cron Job</h3>
+  <table>
+    <thead><tr><th>Job</th><th>Ultima esecuzione</th><th>Durata</th><th>Errore</th></tr></thead>
+    <tbody id="cronStatusTable">
+      <tr><td colspan="4" style="text-align:center;color:var(--text-secondary);">Caricamento...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const CRON_NAMES = { municipality: 'Municipi', emailDraft: 'Bozze', emailQueue: 'Email', followUp: 'Follow-up', cleanup: 'Pulizia', retryFailed: 'Retry', dailySummary: 'Riepilogo' };
+
+function formatTime(time) {
+  if (!time) return 'mai';
+  if (time.startsWith && time.startsWith('ERR:')) return time;
+  const minAgo = Math.floor((Date.now() - new Date(time).getTime()) / 60000);
+  return minAgo < 1 ? 'ora' : minAgo + 'm fa';
+}
+
+async function loadStatus() {
+  try {
+    const [diag, cronRes] = await Promise.all([
+      fetch('/api/admin/diagnostics').then(r => r.json()),
+      fetch('/api/admin/cron-status').then(r => r.json()),
+    ]);
+
+    document.getElementById('queueStatus').innerHTML = `<div class="kpi-value">${diag.queue_pending}</div><div class="kpi-label">Email in coda</div>`;
+
+    const health = await fetch('/health').then(r => r.json());
+    document.getElementById('memoryStatus').innerHTML = `<div class="kpi-value">${health.memory_mb}MB</div><div class="kpi-label">Memoria</div>`;
+    document.getElementById('uptimeStatus').innerHTML = `<div class="kpi-value">${Math.floor(health.uptime / 3600)}h</div><div class="kpi-label">Uptime</div>`;
+
+    const globalEl = document.getElementById('globalStatus');
+    const allOk = true; // Listmonk rimosso
+    globalEl.style.background = allOk ? 'var(--success)' : 'var(--danger)';
+    globalEl.style.color = 'white';
+    globalEl.textContent = allOk ? '✓ Tutto OK' : '⚠ Problemi rilevati';
+
+    let html = '';
+    const runs = cronRes.lastRuns || {};
+    const durations = cronRes.lastDuration || {};
+    const errors = cronRes.lastError || {};
+    let hasData = false;
+    for (const [name, label] of Object.entries(CRON_NAMES)) {
+      hasData = true;
+      const isActive = (cronRes.active || []).includes(name);
+      html += `<tr>
+        <td><strong>${label}</strong> ${isActive ? '<span class="badge badge-warning">In esecuzione</span>' : ''}</td>
+        <td>${formatTime(runs[name])}</td>
+        <td>${durations[name] ? durations[name] + 's' : '-'}</td>
+        <td>${errors[name] ? '<span class="badge badge-danger">' + errors[name] + '</span>' : '<span style="color:var(--success);">✓</span>'}</td>
+      </tr>`;
+    }
+    if (!hasData) {
+      html = '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary);">Nessun dato cron</td></tr>';
+    }
+    document.getElementById('cronStatusTable').innerHTML = html;
+  } catch (err) {
+    document.getElementById('globalStatus').style.background = 'var(--danger)';
+    document.getElementById('globalStatus').textContent = '⚠ Errore connessione';
+  }
+}
+
+loadStatus();
+setInterval(loadStatus, 30000);
+</script>

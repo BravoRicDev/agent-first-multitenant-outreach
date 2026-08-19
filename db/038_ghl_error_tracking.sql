@@ -1,0 +1,2 @@
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS ghl_error_message TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS ghl_error_at TIMESTAMPTZ;

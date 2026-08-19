@@ -1,0 +1,290 @@
+<div class="page-header">
+  <h1>Campagne</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span id="filterCount" style="font-size:13px;color:var(--text-secondary);"></span>
+    <a href="/campaigns/new" class="btn btn-primary">+ Nuova Campagna</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="filters">
+    <div class="filter-group">
+      <label>Cerca nome</label>
+      <input type="text" id="filterSearch" placeholder="Nome campagna..." style="width:180px;">
+    </div>
+    <div class="filter-group">
+      <label>SMTP</label>
+      <select id="filterSmtp" style="min-width:140px;">
+        <option value="">Tutti</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Da data</label>
+      <input type="date" id="filterDateFrom">
+    </div>
+    <div class="filter-group">
+      <label>A data</label>
+      <input type="date" id="filterDateTo">
+    </div>
+    <button id="resetFiltersBtn" class="btn btn-secondary btn-sm" style="align-self:end;">↺ Reset</button>
+  </div>
+</div>
+
+<div class="card">
+  <div style="overflow-x:auto;">
+    <table id="campaignsTable">
+      <thead>
+        <tr>
+          <th data-sort="name" class="sortable">Nome <span class="sort-icon"></span></th>
+          <th data-sort="smtp_name" class="sortable">SMTP <span class="sort-icon"></span></th>
+          <th data-sort="created_at" class="sortable">Creata <span class="sort-icon"></span></th>
+          <th data-sort="inviate" class="sortable">Inviate <span class="sort-icon"></span></th>
+          <th data-sort="aperte" class="sortable">Aperte <span class="sort-icon"></span></th>
+          <th data-sort="cliccate" class="sortable">Cliccate <span class="sort-icon"></span></th>
+          <th data-sort="bounced" class="sortable">Bounced <span class="sort-icon"></span></th>
+          <th style="width:220px;"></th>
+        </tr>
+      </thead>
+      <tbody id="campaignsBody">
+        <tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:40px;">Caricamento...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="tableInfo" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:var(--text-secondary);">
+    <span id="rowCount"></span>
+  </div>
+</div>
+
+<style>
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .sortable:hover {
+    color: var(--brand-primary);
+  }
+  .sort-icon {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .sortable .sort-icon::after {
+    content: '↕';
+    opacity: 0.3;
+  }
+  .sortable.sort-asc .sort-icon::after {
+    content: '↑';
+    opacity: 1;
+    color: var(--brand-primary);
+    font-weight: 700;
+  }
+  .sortable.sort-desc .sort-icon::after {
+    content: '↓';
+    opacity: 1;
+    color: var(--brand-primary);
+    font-weight: 700;
+  }
+  #filterCount.badge-info {
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background: #dbeafe;
+    color: #1e40af;
+  }
+  .campagna-inactive {
+    opacity: 0.5;
+  }
+</style>
+
+<script>
+(function() {
+  const DEBOUNCE_MS = 300;
+  const tbody = document.getElementById('campaignsBody');
+  const rowCount = document.getElementById('rowCount');
+  const filterCount = document.getElementById('filterCount');
+
+  // State
+  let state = {
+    sort: 'created_at',
+    order: 'desc',
+    search: '',
+    smtp_id: '',
+    date_from: '',
+    date_to: ''
+  };
+
+  // Load state from URL on init
+  function loadStateFromURL() {
+    const p = new URLSearchParams(window.location.search);
+    if (p.has('sort')) state.sort = p.get('sort');
+    if (p.has('order')) state.order = p.get('order');
+    if (p.has('search')) state.search = p.get('search');
+    if (p.has('smtp_id')) state.smtp_id = p.get('smtp_id');
+    if (p.has('date_from')) state.date_from = p.get('date_from');
+    if (p.has('date_to')) state.date_to = p.get('date_to');
+  }
+  loadStateFromURL();
+
+  // Sync state to form controls
+  function applyStateToForm() {
+    document.getElementById('filterSearch').value = state.search;
+    document.getElementById('filterSmtp').value = state.smtp_id;
+    document.getElementById('filterDateFrom').value = state.date_from;
+    document.getElementById('filterDateTo').value = state.date_to;
+    // Update sort headers
+    document.querySelectorAll('#campaignsTable th.sortable').forEach(th => {
+      const col = th.dataset.sort;
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (col === state.sort) {
+        th.classList.add(state.order === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  // Update URL without reload
+  function pushState() {
+    const p = new URLSearchParams();
+    if (state.sort !== 'created_at') p.set('sort', state.sort);
+    if (state.order !== 'desc') p.set('order', state.order);
+    if (state.search) p.set('search', state.search);
+    if (state.smtp_id) p.set('smtp_id', state.smtp_id);
+    if (state.date_from) p.set('date_from', state.date_from);
+    if (state.date_to) p.set('date_to', state.date_to);
+    const qs = p.toString();
+    const url = qs ? window.location.pathname + '?' + qs : window.location.pathname;
+    window.history.replaceState(null, '', url);
+  }
+
+  // Fetch data
+  async function load() {
+    const p = new URLSearchParams();
+    p.set('sort', state.sort);
+    p.set('order', state.order);
+    if (state.search) p.set('search', state.search);
+    if (state.smtp_id) p.set('smtp_id', state.smtp_id);
+    if (state.date_from) p.set('date_from', state.date_from);
+    if (state.date_to) p.set('date_to', state.date_to);
+
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:40px;"><span class="loading-spinner" style="display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--brand-primary);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle;"></span> Caricamento...</td></tr>';
+
+    try {
+      const res = await fetch('/api/campaigns?' + p.toString());
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      render(data);
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;"><span style="color:var(--danger);font-size:16px;">⚠️</span><p style="color:var(--danger);margin-top:8px;">Errore di caricamento. <button onclick="location.reload()" class="btn btn-sm btn-secondary">Riprova</button></p></td></tr>';
+    }
+  }
+
+  function render(data) {
+    const campaigns = data.campaigns || [];
+    if (campaigns.length === 0) {
+      const hasFilters = state.search || state.smtp_id || state.date_from || state.date_to;
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px 20px;color:var(--text-secondary);"><div style="font-size:40px;margin-bottom:12px;">📭</div><h3 style="margin-bottom:6px;">' + (hasFilters ? 'Nessuna campagna trovata' : 'Nessuna campagna') + '</h3><p style="font-size:14px;">' + (hasFilters ? 'Prova a modificare i filtri' : 'Crea la prima campagna') + '</p></td></tr>';
+      rowCount.textContent = '0 campagne';
+      filterCount.textContent = '';
+      return;
+    }
+
+    let html = '';
+    campaigns.forEach(c => {
+      const isInactive = !c.is_active;
+      html += '<tr class="' + (isInactive ? 'campagna-inactive' : '') + '">';
+      html += '<td><strong>' + escapeHtml(c.name) + '</strong></td>';
+      html += '<td>';
+      if (c.smtp_name) {
+        html += '<span title="' + escapeHtml(c.smtp_from || '') + '" style="font-size:12px;">' + escapeHtml(c.smtp_name) + '</span>';
+      } else {
+        html += '<span style="color:var(--text-secondary);font-size:11px;">Round-robin</span>';
+      }
+      html += '</td>';
+      html += '<td>' + fmtDate(c.created_at) + '</td>';
+      html += '<td>' + (c.inviate ?? 0) + '</td>';
+      html += '<td>' + (c.aperte ?? 0) + '</td>';
+      html += '<td>' + (c.cliccate ?? 0) + '</td>';
+      html += '<td>' + (c.bounced ?? 0) + '</td>';
+      html += '<td class="actions">';
+      html += '<a href="/companies?campaign_id=' + c.id + '" class="btn btn-sm btn-secondary">Aziende</a>';
+      html += '<a href="/campaigns/' + c.id + '/workflow" class="btn btn-sm btn-success" style="background:#059669;color:#fff;text-decoration:none;padding:4px 10px;border-radius:6px;font-size:12px;">▶ Workflow</a>';
+      html += '<a href="/campaigns/' + c.id + '" class="btn btn-sm btn-primary">Modifica</a>';
+      html += '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+
+    // Show counts
+    const total = campaigns.length;
+    rowCount.textContent = total + ' campagna' + (total !== 1 ? 'e' : '');
+    const activeFilters = [state.search, state.smtp_id, state.date_from, state.date_to].filter(Boolean).length;
+    filterCount.textContent = activeFilters > 0 ? '🔍 ' + total + ' risultati' : '';
+
+    // Populate SMTP dropdown if first load
+    const smtpSel = document.getElementById('filterSmtp');
+    if (smtpSel.options.length <= 1 && data.smtpAccounts && data.smtpAccounts.length > 0) {
+      data.smtpAccounts.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = a.name + (a.from_email ? ' (' + a.from_email + ')' : '');
+        smtpSel.appendChild(opt);
+      });
+      smtpSel.value = state.smtp_id;
+    }
+  }
+
+  // Event handlers
+  function handleSort(e) {
+    const th = e.target.closest('th.sortable');
+    if (!th) return;
+    const col = th.dataset.sort;
+    if (state.sort === col) {
+      state.order = state.order === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.sort = col;
+      state.order = 'asc';
+    }
+    applyStateToForm();
+    pushState();
+    load();
+  }
+
+  let debounceTimer;
+
+  function handleFilterChange() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      state.search = document.getElementById('filterSearch').value;
+      state.smtp_id = document.getElementById('filterSmtp').value;
+      state.date_from = document.getElementById('filterDateFrom').value;
+      state.date_to = document.getElementById('filterDateTo').value;
+      pushState();
+      load();
+    }, DEBOUNCE_MS);
+  }
+
+  function resetFilters() {
+    state.search = '';
+    state.smtp_id = '';
+    state.date_from = '';
+    state.date_to = '';
+    applyStateToForm();
+    pushState();
+    load();
+  }
+
+  // Attach events
+  document.getElementById('campaignsTable').addEventListener('click', handleSort);
+  document.getElementById('filterSearch').addEventListener('input', handleFilterChange);
+  document.getElementById('filterSmtp').addEventListener('change', handleFilterChange);
+  document.getElementById('filterDateFrom').addEventListener('change', handleFilterChange);
+  document.getElementById('filterDateTo').addEventListener('change', handleFilterChange);
+  document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+
+  // Initial render
+  applyStateToForm();
+  load();
+})();
+</script>

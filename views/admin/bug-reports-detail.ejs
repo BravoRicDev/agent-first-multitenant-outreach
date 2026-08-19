@@ -1,0 +1,111 @@
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+  <div>
+    <h1>Segnalazione #<%= report.id %></h1>
+    <p style="font-size:14px;color:var(--text-secondary);">
+      Aperta da <strong><%= (report.user_name || '') + ' ' + (report.user_surname || '') %></strong>
+      (<%= report.user_email %>) il <%= new Date(report.created_at).toLocaleString('it-IT') %>
+    </p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="/bug-reports" class="btn btn-sm btn-secondary">← Torna alla lista</a>
+    <span class="badge badge-<%= report.status %>" style="font-size:13px;padding:6px 14px;">
+      <%= report.status === 'in_lavorazione' ? 'In lavorazione' : report.status %>
+    </span>
+    <span class="badge badge-<%= report.priority %>" style="font-size:13px;padding:6px 14px;"><%= report.priority %></span>
+  </div>
+</div>
+
+<div class="card" style="max-width:720px;">
+  <% if (report.categoria) { %>
+  <div class="form-group">
+    <label>Categoria</label>
+    <p style="margin:0;font-size:14px;"><%= report.categoria %></p>
+  </div>
+  <% } %>
+
+  <div class="form-group">
+    <label>Descrizione</label>
+    <div style="background:var(--bg-body);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;"><%= report.description %></div>
+  </div>
+
+  <% if (report.note_sviluppatore) { %>
+  <div class="form-group">
+    <label>Note sviluppatore</label>
+    <div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;padding:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;"><%= report.note_sviluppatore %></div>
+  </div>
+  <% } %>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
+  <div id="formMsg" style="padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none;"></div>
+
+  <form id="updateForm" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+    <div style="flex:1;min-width:140px;">
+      <label style="font-size:12px;margin-bottom:4px;">Stato</label>
+      <select name="status" style="padding:8px 12px;font-size:13px;">
+        <option value="aperto" <%= report.status === 'aperto' ? 'selected' : '' %>>Aperto</option>
+        <option value="in_lavorazione" <%= report.status === 'in_lavorazione' ? 'selected' : '' %>>In lavorazione</option>
+        <option value="risolto" <%= report.status === 'risolto' ? 'selected' : '' %>>Risolto</option>
+        <option value="chiuso" <%= report.status === 'chiuso' ? 'selected' : '' %>>Chiuso</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:140px;">
+      <label style="font-size:12px;margin-bottom:4px;">Priorit&agrave;</label>
+      <select name="priority" style="padding:8px 12px;font-size:13px;">
+        <option value="bassa" <%= report.priority === 'bassa' ? 'selected' : '' %>>Bassa</option>
+        <option value="normale" <%= report.priority === 'normale' ? 'selected' : '' %>>Normale</option>
+        <option value="alta" <%= report.priority === 'alta' ? 'selected' : '' %>>Alta</option>
+        <option value="critica" <%= report.priority === 'critica' ? 'selected' : '' %>>Critica</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:200px;">
+      <button type="submit" class="btn btn-primary btn-sm">Aggiorna</button>
+    </div>
+  </form>
+
+  <div style="margin-top:16px;">
+    <label for="note_sviluppatore" style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Note sviluppatore</label>
+    <textarea id="note_sviluppatore" rows="3" placeholder="Aggiungi note..."
+              style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;"><%= report.note_sviluppatore || '' %></textarea>
+  </div>
+</div>
+
+<script>
+document.getElementById('updateForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const msg = document.getElementById('formMsg');
+  msg.style.display = 'none';
+  try {
+    const res = await fetch('/api/bug-reports/<%= report.id %>', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: this.status.value,
+        priority: this.priority.value,
+        note_sviluppatore: document.getElementById('note_sviluppatore').value,
+      }),
+    });
+    if (res.ok) {
+      msg.style.display = 'block';
+      msg.style.background = '#ecfdf5';
+      msg.style.color = '#059669';
+      msg.style.border = '1px solid #a7f3d0';
+      msg.textContent = 'Segnalazione aggiornata!';
+      setTimeout(() => window.location.reload(), 1000);
+    } else {
+      const data = await res.json();
+      msg.style.display = 'block';
+      msg.style.background = '#fef2f2';
+      msg.style.color = '#ef4444';
+      msg.style.border = '1px solid #fecaca';
+      msg.textContent = data.error || 'Aggiornamento fallito';
+    }
+  } catch (err) {
+    msg.style.display = 'block';
+    msg.style.background = '#fef2f2';
+    msg.style.color = '#ef4444';
+    msg.style.border = '1px solid #fecaca';
+    msg.textContent = 'Errore di connessione';
+  }
+});
+</script>

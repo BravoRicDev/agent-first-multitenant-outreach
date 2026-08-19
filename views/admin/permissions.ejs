@@ -1,0 +1,66 @@
+<div class="page-header">
+  <h1>Permessi Ruoli</h1>
+  <a href="javascript:history.back()" class="btn btn-secondary">← Indietro</a>
+</div>
+
+<div class="card">
+  <div id="permissionsContent"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+
+<script>
+async function loadPermissions() {
+  try {
+    const res = await fetch('/api/admin/permissions');
+    const data = await res.json();
+    const roles = [...new Set(data.map(p => p.role))].sort();
+    const resources = [...new Set(data.map(p => p.resource))].sort();
+
+    let html = '<div style="overflow-x:auto;"><table><thead><tr><th>Risorsa</th>';
+    roles.forEach(r => { html += `<th style="text-align:center;font-size:11px;">${r}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    resources.forEach(res => {
+      html += `<tr><td><strong>${res}</strong></td>`;
+      roles.forEach(role => {
+        const perm = data.find(p => p.role === role && p.resource === res);
+        const canRead = perm?.can_read || false;
+        const canWrite = perm?.can_update || false;
+        html += `<td style="text-align:center;font-size:12px;">
+          <label style="display:flex;gap:4px;justify-content:center;cursor:pointer;">
+            <input type="checkbox" ${canRead ? 'checked' : ''} data-role="${role}" data-resource="${res}" data-field="can_read">
+            R
+          </label>
+          <label style="display:flex;gap:4px;justify-content:center;cursor:pointer;">
+            <input type="checkbox" ${canWrite ? 'checked' : ''} data-role="${role}" data-resource="${res}" data-field="can_update">
+            W
+          </label>
+        </td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('permissionsContent').innerHTML = html;
+  } catch (err) {
+    document.getElementById('permissionsContent').innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+
+async function togglePerm(role, resource, field, value) {
+  try {
+    await fetch('/api/admin/permissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, resource, [field]: value }),
+    });
+  } catch (_) {}
+}
+
+loadPermissions();
+
+document.getElementById('permissionsContent').addEventListener('change', function(e) {
+  const target = e.target;
+  if (target.matches('input[data-role][data-resource][data-field]')) {
+    togglePerm(target.dataset.role, target.dataset.resource, target.dataset.field, target.checked);
+  }
+});
+</script>

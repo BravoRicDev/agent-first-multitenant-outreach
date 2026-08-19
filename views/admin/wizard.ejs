@@ -1,0 +1,132 @@
+<div style="max-width:600px;margin:40px auto;">
+  <h1 style="text-align:center;margin-bottom:8px;">Benvenuto in <%= brand.name %></h1>
+  <p style="text-align:center;color:var(--text-secondary);margin-bottom:32px;">Configura il servizio in pochi passaggi.</p>
+
+  <div class="card" id="step1">
+    <h3>Passo 1: Info Azienda</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Inserisci le informazioni della tua azienda per personalizzare le email.</p>
+    <div class="form-group"><label>Nome studio / Azienda</label><input type="text" id="wiz_azienda" placeholder="es. Studio Aziendale Rossi"></div>
+    <div class="form-group"><label>Indirizzo</label><input type="text" id="wiz_indirizzo" placeholder="Via Roma 1, Milano"></div>
+    <button class="btn btn-primary" id="wizStep1Next">Avanti →</button>
+  </div>
+
+  <div class="card" id="step2" style="display:none;">
+    <h3>Passo 2: Configurazione SMTP</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Imposta il server SMTP per l'invio delle email.</p>
+    <div class="form-group"><label>Host</label><input type="text" id="wiz_smtp_host" placeholder="smtp.example.com"></div>
+    <div class="form-group"><label>Porta</label><input type="number" id="wiz_smtp_port" placeholder="587"></div>
+    <div class="form-group"><label>Utente</label><input type="text" id="wiz_smtp_user" placeholder="user@example.com"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="wiz_smtp_pass"></div>
+    <div class="form-group"><label>Mittente</label><input type="text" id="wiz_email_from" placeholder="noreply@example.com"></div>
+    <button class="btn btn-secondary" id="wizStep2Prev">← Indietro</button>
+    <button class="btn btn-primary" id="wizStep2Next">Avanti →</button>
+  </div>
+
+  <div class="card" id="step3" style="display:none;">
+    <h3>Passo 3: Chiave API AI</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Configura OpenRouter per la generazione automatica dei testi.</p>
+    <div class="form-group"><label>OpenRouter API Key</label><input type="password" id="wiz_openrouter_key" placeholder="sk-or-..."></div>
+    <button class="btn btn-secondary" id="wizStep3Prev">← Indietro</button>
+    <button class="btn btn-primary" id="wizStep3Next">Avanti →</button>
+  </div>
+
+  <div class="card" id="step4" style="display:none;">
+    <h3>Passo 4: Seleziona Province</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Scegli le province da cui iniziare a cercare aziende.</p>
+    <div id="provinceList"><p style="color:var(--text-secondary);">Caricamento province...</p></div>
+    <button class="btn btn-secondary" id="wizStep4Prev">← Indietro</button>
+    <button class="btn btn-primary" id="wizStep4Next">Completa →</button>
+  </div>
+
+  <div class="card" id="stepDone" style="display:none;">
+    <h3 style="text-align:center;">✅ Configurazione completata!</h3>
+    <p style="text-align:center;color:var(--text-secondary);">Puoi iniziare a processare i comuni e generare le email.</p>
+    <div style="text-align:center;margin-top:16px;"><a href="/dashboard" class="btn btn-primary">Vai alla Dashboard</a></div>
+  </div>
+</div>
+
+<script>
+async function saveStep1() {
+  const info_azienda = document.getElementById('wiz_azienda').value;
+  if (!info_azienda) { showToast('Inserisci il nome dello studio', 'error'); return; }
+  try {
+    await fetch('/api/direzione', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      info_azienda,
+      cta: 'Prenota una consulenza gratuita',
+      link_cta: 'https://example.com/contatti',
+      email_spunti: '',
+      email_template_bozza: 'Buongiorno {{nome_studio}},\n\nVorremmo presentarle i nostri servizi di marketing digitale per il Suo azienda.\n\nCordiali saluti,\n{{info_azienda}}',
+      correzione_prompt: 'Mantieni un tono professionale e cortese. Personalizza il testo in base al comune e provincia del azienda.'
+    }) });
+    showStep(2);
+  } catch (_) { showToast('Errore salvataggio', 'error'); }
+}
+
+async function saveStep2() {
+  const fields = { smtp_host: document.getElementById('wiz_smtp_host').value, smtp_port: document.getElementById('wiz_smtp_port').value, smtp_user: document.getElementById('wiz_smtp_user').value, smtp_pass: document.getElementById('wiz_smtp_pass').value, email_from: document.getElementById('wiz_email_from').value };
+  try {
+    for (const [key, value] of Object.entries(fields)) {
+      if (value) await fetch('/api/admin/settings/' + key, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
+    }
+    showStep(3);
+  } catch (_) { showToast('Errore salvataggio', 'error'); }
+}
+
+async function saveStep3() {
+  const value = document.getElementById('wiz_openrouter_key').value;
+  if (!value) { showToast('Inserisci la API Key', 'error'); return; }
+  try {
+    await fetch('/api/admin/settings/openrouter_api_key', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
+    showStep(4);
+  } catch (_) { showToast('Errore salvataggio', 'error'); }
+}
+
+async function saveStep4() {
+  const provinces = Array.from(document.querySelectorAll('.province-select:checked')).map(cb => cb.value);
+  try {
+    if (provinces.length) {
+      await fetch('/api/admin/settings/selected_provinces', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: provinces.join(',') }) });
+    }
+    await fetch('/api/admin/settings/wizard_completed', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'true' }) });
+    showStep('done');
+  } catch (_) { showToast('Errore', 'error'); }
+}
+
+function showStep(num) {
+  for (let i = 1; i <= 4; i++) document.getElementById('step' + i).style.display = 'none';
+  document.getElementById('stepDone').style.display = 'none';
+  if (num === 'done') { document.getElementById('stepDone').style.display = 'block'; return; }
+  document.getElementById('step' + num).style.display = 'block';
+}
+
+function prevStep(current) {
+  showStep(current - 1);
+}
+
+(async function() {
+  try {
+    const res = await fetch('/api/municipalities?limit=1');
+    const data = await res.json();
+    const provRes = await fetch('/api/provinces');
+    const provinces = await provRes.json();
+    let html2 = '';
+    provinces.forEach(p => {
+      html2 += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px;cursor:pointer;">
+        <input type="checkbox" class="province-select" value="${p.sigla_provincia}"> ${p.sigla_provincia}
+      </label>`;
+    });
+    document.getElementById('provinceList').innerHTML = html2 || 'Nessuna provincia trovata';
+  } catch (_) {
+    document.getElementById('provinceList').innerHTML = '<p style="color:var(--text-secondary);">Impossibile caricare province</p>';
+  }
+})();
+
+// Converted from inline onclick handlers
+document.getElementById('wizStep1Next')?.addEventListener('click', saveStep1);
+document.getElementById('wizStep2Prev')?.addEventListener('click', () => prevStep(1));
+document.getElementById('wizStep2Next')?.addEventListener('click', saveStep2);
+document.getElementById('wizStep3Prev')?.addEventListener('click', () => prevStep(2));
+document.getElementById('wizStep3Next')?.addEventListener('click', saveStep3);
+document.getElementById('wizStep4Prev')?.addEventListener('click', () => prevStep(3));
+document.getElementById('wizStep4Next')?.addEventListener('click', saveStep4);
+</script>

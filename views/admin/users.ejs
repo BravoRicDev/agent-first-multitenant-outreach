@@ -1,0 +1,209 @@
+<div class="page-header">
+  <h1>Gestione Utenti</h1>
+  <div style="display: flex; gap: 8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <a href="/admin/settings" class="btn btn-secondary">Impostazioni</a>
+    <button class="btn btn-primary" id="nuovoUtenteBtn">Nuovo utente</button>
+  </div>
+</div>
+
+<div class="card" id="newUserForm" style="display:none;">
+  <h3 style="margin-bottom: 16px;">Nuovo Utente</h3>
+  <form id="createUserForm">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>Nome</label>
+        <input type="text" name="name" required>
+      </div>
+      <div class="form-group">
+        <label>Cognome</label>
+        <input type="text" name="surname">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" name="email" required>
+    </div>
+    <div class="form-group">
+      <label>Ruolo</label>
+      <select name="role">
+        <option value="collaboratore">Collaboratore</option>
+        <option value="admin">Admin</option>
+        <option value="superadmin">Superadmin</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Crea utente</button>
+    <button type="button" class="btn btn-secondary" id="annullaNewUserBtn">Annulla</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Email</th>
+        <th>Ruolo</th>
+        <th>Stato</th>
+        <th>Creato il</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% users.forEach(u => { %>
+      <tr>
+        <td><%= u.name %> <%= u.surname %></td>
+        <td><%= u.email %></td>
+        <td><span class="badge badge-info"><%= u.role %></span></td>
+        <td>
+          <span class="badge <%= u.status === 'active' ? 'badge-success' : 'badge-danger' %>">
+            <%= u.status %>
+          </span>
+        </td>
+        <td><%= new Date(u.created_at).toLocaleDateString('it-IT') %></td>
+        <td>
+          <select data-user-id="<%= u.id %>" class="btn-sm">
+            <option value="<%= u.role %>" selected><%= u.role %></option>
+            <% ['collaboratore', 'admin', 'superadmin'].filter(r => r !== u.role).forEach(r => { %>
+            <option value="<%= r %>"><%= r %></option>
+            <% }) %>
+          </select>
+          <button class="btn btn-sm btn-danger" data-action="toggleStatus" data-user-id="<%= u.id %>" data-current-status="<%= u.status %>">
+            <%= u.status === 'active' ? 'Disabilita' : 'Attiva' %>
+          </button>
+          <% if (protectedUserEmail && u.email === protectedUserEmail) { %><span class="badge badge-info">Protetto</span><% } else { %>
+          <button class="btn btn-sm btn-danger" data-action="deleteUser" data-user-id="<%= u.id %>" style="margin-left:4px;" title="Elimina">🗑</button>
+          <% } %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Audit Log</h3>
+  <a href="/admin/audit" class="btn btn-secondary">Vedi log completo</a>
+</div>
+
+<script>
+const createForm = document.getElementById('createUserForm');
+if (createForm) {
+  createForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = createForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Creazione...';
+    const data = Object.fromEntries(new FormData(e.target));
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.success) {
+        document.getElementById('newUserForm').style.display = 'none';
+        createForm.reset();
+        showToast('Utente creato');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast('Errore: ' + (result.error || 'sconosciuto'), 'error');
+        btn.disabled = false;
+        btn.textContent = 'Crea utente';
+      }
+    } catch (err) {
+      showToast('Errore di connessione', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Crea utente';
+    }
+  });
+}
+
+async function updateUser(id, role) {
+  if (!role) return;
+  const select = document.querySelector(`[data-user-id="${id}"]`);
+  const prevValue = select ? select.value : '';
+  try {
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+    if (res.ok) {
+      showToast('Ruolo aggiornato');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      const data = await res.json();
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+      if (select) select.value = '';
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+    if (select) select.value = '';
+  }
+}
+
+async function deleteUser(id) {
+  if (!confirm('Eliminare definitivamente questo utente?')) return;
+  try {
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) { showToast('Utente eliminato'); setTimeout(() => location.reload(), 1000); }
+    else showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+  } catch (e) { showToast('Errore di connessione', 'error'); }
+}
+
+async function toggleStatus(id, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+  try {
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (res.ok) {
+      showToast('Stato aggiornato');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      const data = await res.json();
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+document.getElementById('nuovoUtenteBtn')?.addEventListener('click', () => {
+  const form = document.getElementById('newUserForm');
+  if (form) {
+    form.style.display = 'block';
+  }
+});
+
+document.getElementById('annullaNewUserBtn')?.addEventListener('click', () => {
+  const card = document.getElementById('newUserForm');
+  if (card) card.style.display = 'none';
+});
+
+// Event delegation for dynamic user table controls
+document.addEventListener('change', function(e) {
+  const select = e.target;
+  if (select.matches('select[data-user-id]')) {
+    updateUser(select.dataset.userId, select.value);
+  }
+});
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-action="toggleStatus"]');
+  if (btn) {
+    toggleStatus(btn.dataset.userId, btn.dataset.currentStatus);
+    return;
+  }
+  const delBtn = e.target.closest('[data-action="deleteUser"]');
+  if (delBtn) {
+    deleteUser(delBtn.dataset.userId);
+    return;
+  }
+});
+</script>

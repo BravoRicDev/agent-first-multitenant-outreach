@@ -1,0 +1,39 @@
+<div class="page-header">
+  <h1><%= t('profile.title') %></h1>
+  <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← <%= t('common.back') %></a>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">I tuoi dati</h3>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+    <div><strong>Nome:</strong> <%= user.name %></div>
+    <div><strong>Email:</strong> <%= user.email %></div>
+    <div><strong>Ruolo:</strong> <span class="badge badge-info"><%= user.role %></span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:16px;">Sessioni Recenti</h3>
+  <div id="sessionsContent"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+
+
+<script>
+loadSessions();
+async function loadSessions() {
+  try {
+    const res = await fetch('/api/profile/sessions');
+    const sessions = await res.json();
+    let html = '<table><thead><tr><th>Data</th><th>IP</th><th>Tipo</th></tr></thead><tbody>';
+    sessions.forEach(s => {
+      const details = s.details ? (typeof s.details === 'string' ? JSON.parse(s.details) : s.details) : {};
+      const type = details.method || 'OTP';
+      html += `<tr><td>${new Date(s.created_at).toLocaleString('it-IT')}</td><td>${s.ip_address || '-'}</td><td>${type}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('sessionsContent').innerHTML = html;
+  } catch (err) {
+    document.getElementById('sessionsContent').innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+</script>

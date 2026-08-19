@@ -1,0 +1,174 @@
+<div class="page-header">
+  <h1>Coda di Invio</h1>
+  <div style="display:flex;gap:8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <button class="btn btn-sm btn-secondary" id="tabPending">In coda</button>
+    <button class="btn btn-sm btn-secondary" id="tabFailed">Fallite</button>
+    <button class="btn btn-sm btn-secondary" id="tabAll">Tutti</button>
+    <button class="btn btn-sm btn-primary" id="retryAllBtn" style="display:none;">Riprova tutte</button>
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+  <select id="queueCampaignFilter" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;">
+    <option value="">Tutte le campagne</option>
+  </select>
+  <button class="btn btn-sm btn-danger" id="clearCampaignQueueBtn">🗑 Svuota coda campagna</button>
+  <button class="btn btn-sm btn-secondary" id="refreshQueueBtn">🔄 Aggiorna</button>
+</div>
+
+<div class="card">
+  <div id="queueContent"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+
+<script>
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function loadTab(tab) {
+  document.getElementById('tabPending').style.background = tab === 'pending' ? 'var(--brand-gradient)' : '';
+  document.getElementById('tabPending').style.color = tab === 'pending' ? 'white' : '';
+  document.getElementById('tabFailed').style.background = tab === 'failed' ? 'var(--brand-gradient)' : '';
+  document.getElementById('tabFailed').style.color = tab === 'failed' ? 'white' : '';
+  document.getElementById('retryAllBtn').style.display = tab === 'failed' ? 'inline-flex' : 'none';
+
+  try {
+    const res = await fetch(`/api/admin/queue?tab=${tab}`);
+    const data = await res.json();
+    let html = '';
+    if (tab === 'pending') {
+      html = '<table><thead><tr><th style="width:40px;"></th><th>Studio</th><th>Stato</th><th>Creato</th><th></th></tr></thead><tbody>';
+      data.items.forEach(item => {
+        html += `<tr>
+          <td><input type="checkbox" class="queue-select" value="${item.id}"></td>
+          <td><strong>${escapeHtml(item.title || item.nome_studio || '—')}</strong>${item.nome_azienda ? '<br><small>' + escapeHtml(item.nome_azienda) + '</small>' : ''}</td>
+          <td><span class="badge ${item.status === 'pending' ? 'badge-warning' : item.status === 'sending' ? 'badge-info' : 'badge-success'}">${escapeHtml(item.status)}</span></td>
+          <td>${new Date(item.created_at).toLocaleString('it-IT')}</td>
+          <td><button class="btn btn-sm btn-danger remove-from-queue" data-id="${item.id}">Rimuovi</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      html += '<div style="margin-top:8px;"><button class="btn btn-sm btn-danger" id="removeSelectedBtn" disabled>Rimuovi selezionati</button></div>';
+    } else {
+      html = '<table><thead><tr><th>Studio</th><th>Errori</th><th>Ultimo tentativo</th><th>Errore</th></tr></thead><tbody>';
+      data.items.forEach(item => {
+        html += `<tr>
+          <td><strong>${escapeHtml(item.title || item.nome_studio || '—')}</strong></td>
+          <td>${item.retry_count || 0}</td>
+          <td>${item.last_retry_at ? new Date(item.last_retry_at).toLocaleString('it-IT') : '—'}</td>
+          <td style="font-size:12px;color:var(--danger);">${escapeHtml(item.error || '—')}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    if (data.items.length === 0) {
+      html = '<div class="empty-state"><h3>Nessun elemento</h3><p>La coda è vuota.</p></div>';
+    }
+    document.getElementById('queueContent').innerHTML = html;
+
+    if (tab === 'pending') {
+      const selects = document.querySelectorAll('.queue-select');
+      selects.forEach(cb => cb.addEventListener('change', updateRemoveBtn));
+    }
+  } catch (err) {
+    document.getElementById('queueContent').innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+
+function updateRemoveBtn() {
+  const count = document.querySelectorAll('.queue-select:checked').length;
+  const btn = document.getElementById('removeSelectedBtn');
+  if (btn) btn.disabled = count === 0;
+}
+
+async function removeFromQueue(id) {
+  if (!confirm('Rimuovere questa email dalla coda?')) return;
+  try {
+    const res = await fetch(`/api/admin/queue/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) { showToast('Rimosso'); loadTab('pending'); }
+    else showToast('Errore', 'error');
+  } catch (_) { showToast('Errore di connessione', 'error'); }
+}
+
+async function removeSelected() {
+  const ids = Array.from(document.querySelectorAll('.queue-select:checked')).map(cb => cb.value);
+  if (!confirm(`Rimuovere ${ids.length} email dalla coda?`)) return;
+  try {
+    const results = await Promise.allSettled(ids.map(id => fetch(`/api/admin/queue/${id}`, { method: 'DELETE' })));
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    showToast(`${ok}/${ids.length} rimosse`);
+  } catch (_) { showToast('Errore', 'error'); }
+}
+
+async function loadCampaignsForQueue() {
+  try {
+    var res = await fetch('/api/campaigns');
+    var data = await res.json();
+    var sel = document.getElementById('queueCampaignFilter');
+    if (!sel) return;
+    data.forEach(function(c) {
+      var opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+async function clearCampaignQueue() {
+  var cid = document.getElementById('queueCampaignFilter').value;
+  if (!cid) { showToast('Seleziona una campagna prima', 'error'); return; }
+  if (!confirm('Svuotare la coda per questa campagna?')) return;
+  try {
+    var res = await fetch('/api/admin/queue/campaign/' + cid, { method: 'DELETE' });
+    var data = await res.json();
+    if (data.deleted !== undefined) showToast(data.deleted + ' email rimosse');
+    loadTab('pending');
+  } catch(e) { showToast('Errore', 'error'); }
+}
+
+// --- Setup event listeners (no inline handlers) ---
+function setupEventListeners() {
+  document.getElementById('tabPending').addEventListener('click', () => loadTab('pending'));
+  document.getElementById('tabFailed').addEventListener('click', () => loadTab('failed'));
+  document.getElementById('tabAll').addEventListener('click', () => loadTab('all'));
+  document.getElementById('retryAllBtn').addEventListener('click', retryAllFailed);
+  document.getElementById('clearCampaignQueueBtn').addEventListener('click', clearCampaignQueue);
+  document.getElementById('refreshQueueBtn').addEventListener('click', () => loadTab('pending'));
+
+  // Event delegation for dynamically-added content inside #queueContent
+  document.getElementById('queueContent').addEventListener('click', function(e) {
+    // Remove individual queue item
+    const removeBtn = e.target.closest('.remove-from-queue');
+    if (removeBtn) {
+      const id = removeBtn.dataset.id;
+      removeFromQueue(id);
+      return;
+    }
+    // Remove selected items
+    if (e.target.id === 'removeSelectedBtn') {
+      removeSelected();
+    }
+  });
+}
+setupEventListeners();
+loadTab('pending');
+loadCampaignsForQueue();
+
+async function retryAllFailed() {
+  if (!confirm('Riprocessare tutte le email fallite?')) return;
+  try {
+    const res = await fetch('/api/cron/retry-failed', { method: 'POST' });
+    const data = await res.json();
+    showToast(data.message || 'Riprocessate');
+    loadTab('failed');
+  } catch (_) { showToast('Errore', 'error'); }
+}
+</script>

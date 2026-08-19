@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS smtp_accounts (
+  id           SERIAL PRIMARY KEY,
+  name         TEXT NOT NULL,
+  smtp_host    TEXT NOT NULL,
+  smtp_port    INT NOT NULL DEFAULT 465,
+  smtp_user    TEXT NOT NULL,
+  smtp_pass    TEXT NOT NULL,
+  from_email   TEXT NOT NULL,
+  from_name    TEXT DEFAULT 'Outreach Service',
+  imap_host    TEXT,
+  imap_port    INT DEFAULT 993,
+  imap_user    TEXT,
+  imap_pass    TEXT,
+  daily_limit  INT NOT NULL DEFAULT 100,
+  sent_today   INT NOT NULL DEFAULT 0,
+  rr_position  INT NOT NULL DEFAULT 0,
+  is_active    BOOLEAN DEFAULT true,
+  bounce_count INT DEFAULT 0,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
+);

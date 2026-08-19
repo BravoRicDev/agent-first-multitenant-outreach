@@ -1,0 +1,68 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    env_file: .env
+    volumes:
+      - ./public:/app/public
+      - ./db:/app/db
+    # In sviluppo aggiungere ./src:/app/src e ./views:/app/views con docker-compose.override.yml
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - edge_net
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: outreach
+      POSTGRES_USER: outreach
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outreach -d outreach"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbackup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - backupdata:/backups
+    environment:
+      DB_HOST: db
+      DB_USER: outreach
+      DB_NAME: outreach
+      DB_PASSWORD: ${DB_PASSWORD}
+      RETENTION_DAYS: "30"
+    entrypoint: ["/bin/sh", "-c", "while true; do /backup.sh; sleep 86400; done"]
+    networks:
+      - internal
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  backupdata:
+
+networks:
+  edge_net:
+    external: true
+  internal:
+    driver: bridge

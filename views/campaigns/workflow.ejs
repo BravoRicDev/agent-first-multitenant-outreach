@@ -1,0 +1,1453 @@
+<div class="page-header">
+  <h1><%= campaign.name %> — Workflow</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="/campaigns" class="btn btn-secondary">← Tutte le campagne</a>
+    <a href="/campaigns/<%= campaign.id %>" class="btn btn-secondary">✏️ Modifica campagna</a>
+  </div>
+</div>
+
+<!-- Istruzioni a prova di scimmia -->
+<details class="help-panel" style="margin-bottom:16px;border:1px solid var(--border);border-radius:10px;background:var(--hover-bg);">
+  <summary style="cursor:pointer;padding:12px 16px;font-weight:600;font-size:14px;color:var(--brand-primary);">❓ Come funziona — la guida in 3 passi</summary>
+  <div style="padding:4px 16px 14px;font-size:13px;line-height:1.7;color:var(--text-primary);">
+    <p style="margin:8px 0;"><strong>📅 Pianificare gli invii in blocco (il modo più veloce):</strong></p>
+    <ol style="margin:4px 0 10px 20px;padding:0;">
+      <li>Nel filtro scegli <strong>"Approvati"</strong> — qui vedi solo le email pronte che mancano ancora di data d'invio.</li>
+      <li>Scegli <strong>"Seleziona N"</strong> (es. 20): seleziona da solo i primi 20 studi pianificabili, saltando chi è già programmato o bloccato.</li>
+      <li>Clicca <strong>"📅 Pian."</strong> → scegli <strong>"📅 Stessa data"</strong> o <strong>"⏳ Spalma sul mese"</strong>.</li>
+      <li><strong>⏳ Spalma sul mese:</strong> scegli data di partenza, ora e quante email al giorno (es. 10) → <strong>"Salva"</strong>. Il sistema distribuisce da solo le email sui giorni lavorativi (lun-ven, 8:00-17:00). Esempio: 100 email a 10/giorno = 10 giorni lavorativi.</li>
+      <li>✅ Fatto: i aziende spariscono dalla lista e compaiono nel filtro <strong>"📅 Pianificati"</strong> con la loro data. Ripeti finché non finisci!</li>
+    </ol>
+    <p style="margin:8px 0;"><strong>✅ Approvare una bozza:</strong> clicca <strong>"○ Approva"</strong> sulla riga (diventa verde "✓ Approvato"). Per tante insieme: spunta le caselle e clicca <strong>"✓ Appr."</strong> in alto.</p>
+    <p style="margin:8px 0;"><strong>🔄 Rigenerare una bozza:</strong> clicca <strong>"🔄"</strong> sulla riga — l'AI ne crea una nuova (aspetta qualche secondo, la lista si aggiorna da sola).</p>
+    <p style="margin:8px 0;"><strong>🕐 Le email partono da sole</strong> tra le 8:00 e le 17:00 nei giorni feriali. Chi è in "📅 Pianificati" è già in coda: non serve fare niente.</p>
+  </div>
+</details>
+
+<!-- KPI Stats -->
+<div class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:16px;" id="workflowKpis">
+  <div class="kpi-card"><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-label">Totale aziende</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiDraft">—</div><div class="kpi-label">Bozze create</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiApproved">—</div><div class="kpi-label">Approvati</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiScheduled">—</div><div class="kpi-label">📅 Pianificati</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiSent">—</div><div class="kpi-label">Inviati</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiOpened">—</div><div class="kpi-label">Aperti</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiBounced">—</div><div class="kpi-label">Bounced</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpiFailed" style="font-size:22px;">—</div><div class="kpi-label">❌ Falliti</div></div>
+</div>
+
+<!-- Diagnostic Alerts -->
+<div id="diagnosticAlerts" style="margin-bottom:12px;"></div>
+
+<!-- Action Bar -->
+<div class="card" style="padding:12px 16px;margin-bottom:16px;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <button class="btn btn-primary" id="btnOpenAddCompanies">➕ Aggiungi aziende</button>
+    <button class="btn btn-secondary" id="btnGenerateAllDrafts">🔄 Genera bozze</button>
+    <button class="btn btn-danger" id="btnRemoveNoEmail" style="display:none;padding:6px 14px;font-size:12px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️ Rimuovi tutti i senza email</button>
+    <a href="/api/campaigns/<%= campaign.id %>/companies/export-csv" class="btn btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:6px 14px;">⬇ CSV</a>
+    <span style="display:flex;gap:3px;padding:0 4px;border-left:2px solid var(--border);margin-left:4px;flex-wrap:wrap;">
+      <button class="btn btn-sm btn-success" id="btnBatchApprove" disabled style="padding:3px 7px;font-size:11px;background:#10b981;color:#fff;">✓ Appr.</button>
+      <button class="btn btn-sm btn-secondary" id="btnBatchRegen" disabled style="padding:3px 7px;font-size:11px;">🔄 Rig.</button>
+      <button class="btn btn-sm btn-secondary" id="btnBatchSchedule" disabled style="padding:3px 7px;font-size:11px;">📅 Pian.</button>
+      <button class="btn btn-sm btn-secondary" id="btnBatchFollowupGenerate" disabled style="padding:3px 7px;font-size:11px;">🤖 Gen.FU</button>
+      <button class="btn btn-sm btn-success" id="btnBatchFollowupApprove" disabled style="padding:3px 7px;font-size:11px;background:#8b5cf6;color:#fff;">✅ Appr.FU</button>
+      <button class="btn btn-sm btn-danger" id="btnBatchRemove" disabled style="padding:3px 7px;font-size:11px;background:#ef4444;color:#fff;">✕ Rim.</button>
+    </span>
+    <span style="display:flex;gap:3px;align-items:center;padding:0 4px;border-left:2px solid var(--border);margin-left:4px;">
+      <select id="selectN" title="Seleziona automaticamente i primi N aziende pianificabili (salta chi è già pianificato, consenso cold o bloccato)" style="padding:3px 7px;font-size:11px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:#fff;">
+        <option value="0">Seleziona N</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </span>
+    <span style="flex:1;"></span>
+    <select id="workflowFilter" style="width:auto;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+      <option value="all">Tutti</option>
+      <option value="pending">Senza bozza</option>
+      <option value="draft">Bozza pronta</option>
+      <option value="approved">Approvati</option>
+      <option value="scheduled">📅 Pianificati</option>
+      <option value="sent">Inviati</option>
+      <option value="bounced">Bounced</option>
+      <option value="opened">Aperti</option>
+      <option value="failed">❌ Falliti</option>
+      <option value="noemail">📭 Senza email</option>
+    </select>
+    <input type="search" id="workflowSearch" placeholder="Cerca azienda..." style="width:150px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+    <button class="btn btn-sm btn-secondary" id="btnSearchCompanies" style="padding:4px 10px;font-size:12px;">🔍</button>
+    <button class="btn btn-sm btn-secondary" id="btnResetFilters" style="padding:4px 10px;font-size:12px;">↺ Reset</button>
+  </div>
+</div>
+
+<!-- Company Table -->
+<div class="card" style="overflow-x:auto;">
+  <table id="workflowTable" style="table-layout:fixed;width:100%;">
+    <thead>
+      <tr>
+        <th style="width:30px;"><input type="checkbox" id="selectAllCompanies"></th>
+        <th style="width:30px;"></th>
+        <th class="sortable" data-sort="nome_studio">Studio / Azienda <span class="sort-icon"></span></th>
+        <th style="width:220px;" class="sortable" data-sort="email">Email <span class="sort-icon"></span></th>
+        <th style="width:80px;" class="sortable" data-sort="comune">Città <span class="sort-icon"></span></th>
+        <th style="width:95px;" class="sortable" data-sort="bozza_creata">Stato <span class="sort-icon"></span></th>
+        <th style="width:140px;">Oggetto email</th>
+        <th style="width:85px;" class="sortable" data-sort="followup_sent">Followup <span class="sort-icon"></span></th>
+        <th style="width:95px;" class="sortable" data-sort="send_scheduled_at">Pianificato <span class="sort-icon"></span></th>
+        <th style="width:130px;">Azioni</th>
+      </tr>
+    </thead>
+    <tbody id="workflowTbody">
+      <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-secondary);">Caricamento in corso...</td></tr>
+    </tbody>
+  </table>
+  <!-- Infinite scroll sentinel -->
+  <div id="scrollSentinel" style="height:1px;"></div>
+  <div style="text-align:center;padding:8px;font-size:12px;color:var(--text-secondary);">
+    <span id="totalCompaniesCount"></span>
+  </div>
+</div>
+
+<!-- Add Companies Modal -->
+<div id="addCompaniesModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:900px;">
+    <div class="modal-header">
+      <h3>Aggiungi aziende alla campagna</h3>
+      <button class="modal-close" id="btnModalCloseAddCompanies">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <input type="search" id="addCompanySearch" placeholder="Cerca... " style="flex:1;min-width:140px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;">
+        <select id="addCompanyRegione" style="width:150px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;">
+          <option value="">Tutte le regioni</option>
+        </select>
+        <select id="addCompanyProvincia" style="width:120px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;">
+          <option value="">Tutte le province</option>
+        </select>
+      </div>
+      <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+        <table style="width:100%;font-size:13px;">
+          <thead>
+            <tr>
+              <th style="width:32px;"><input type="checkbox" id="selectAllAvailable"></th>
+              <th>Studio</th>
+              <th>Email</th>
+              <th>Città</th>
+              <th>Prov.</th>
+            </tr>
+          </thead>
+          <tbody id="availableCompaniesTbody">
+            <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary);">Caricamento...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;">
+      <span id="selectedCount" style="font-size:13px;color:var(--text-secondary);">Nessun azienda selezionato</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" id="btnCancelAddCompanies">Annulla</button>
+        <button class="btn btn-primary" id="btnAddSelectedCompanies">➕ Aggiungi selezionati</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Draft Preview Modal -->
+<div id="previewModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h3 id="previewTitle">Anteprima bozza</h3>
+      <button class="modal-close" id="btnClosePreview">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="previewContent" style="white-space:pre-wrap;font-size:14px;line-height:1.6;background:#f9fafb;padding:16px;border-radius:8px;max-height:500px;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Sent Email Modal -->
+<div id="sentEmailModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h3 id="sentEmailTitle">📨 Email inviata</h3>
+      <button class="modal-close" id="btnCloseSentEmail">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="sentEmailMeta" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;"></div>
+      <div id="sentEmailContent" style="white-space:pre-wrap;font-size:14px;line-height:1.6;background:var(--hover-bg);padding:16px;border-radius:8px;max-height:500px;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Followup Preview Modal -->
+<div id="followupModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h3 id="followupTitle">Followup — Dettaglio</h3>
+      <button class="modal-close" id="btnCloseFollowup">&times;</button>
+    </div>
+    <div class="modal-body" id="followupBody">
+      <div style="text-align:center;padding:30px;color:var(--text-secondary);">Caricamento...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Date Picker Modal -->
+<div id="scheduleModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <h3 id="scheduleTitle">Pianifica invio</h3>
+      <button class="modal-close" id="btnCloseSchedule">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;" id="scheduleDesc">Scegli la data per l'invio della prima email</p>
+      <div id="scheduleModeToggle" style="display:none;gap:6px;margin-bottom:14px;">
+        <button type="button" id="btnModeSingle" class="btn btn-sm schedule-mode-btn active" style="flex:1;">📅 Stessa data</button>
+        <button type="button" id="btnModeSpread" class="btn btn-sm schedule-mode-btn" style="flex:1;">⏳ Spalma sul mese</button>
+      </div>
+      <div id="scheduleSingleFields">
+        <input type="datetime-local" id="scheduleDatePicker" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+      </div>
+      <div id="scheduleSpreadFields" style="display:none;">
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <div style="flex:1.4;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">📅 Data di partenza</label>
+            <input type="date" id="spreadStartDate" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+          </div>
+          <div style="flex:0.7;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">🕘 Ora</label>
+            <select id="spreadHour" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+              <option value="8">08:00</option><option value="9" selected>09:00</option>
+              <option value="10">10:00</option><option value="11">11:00</option>
+              <option value="12">12:00</option><option value="13">13:00</option>
+              <option value="14">14:00</option><option value="15">15:00</option>
+              <option value="16">16:00</option><option value="17">17:00</option>
+            </select>
+          </div>
+          <div style="flex:0.7;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">✉️ Email al giorno</label>
+            <input type="number" id="spreadPerDay" min="1" max="500" value="10" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+          </div>
+        </div>
+        <div id="spreadPreview" style="font-size:13px;padding:10px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;color:#4338ca;min-height:38px;"></div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-secondary" id="btnCancelSchedule">Annulla</button>
+      <button class="btn btn-secondary" id="btnClearSchedule">🗑️ Rimuovi data</button>
+      <button class="btn btn-primary" id="btnSaveSchedule">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Email Modal -->
+<div id="editEmailModal" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 id="editEmailTitle">Cambia email</h3>
+      <button class="modal-close" id="btnCloseEditEmail">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;" id="editEmailDesc">Inserisci il nuovo indirizzo email per <strong id="editEmailCompanyName"></strong></p>
+      <input type="email" id="editEmailInput" placeholder="nuova@email.it" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+      <div id="editEmailFeedback" style="margin-top:8px;font-size:13px;display:none;"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-secondary" id="btnCancelEditEmail">Annulla</button>
+      <button class="btn btn-primary" id="btnSaveEditEmail">💾 Salva</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .btn-success { background:#10b981;color:#fff; }
+  .btn-success:hover { background:#059669; }
+  .btn-danger { background:#ef4444;color:#fff; }
+  .btn-danger:hover { background:#dc2626; }
+  .btn-sm { font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px; }
+  .btn-sm:hover { background:#f1f5f9; }
+
+  .schedule-mode-btn { border:1px solid var(--border);background:#fff;color:var(--text-primary);padding:8px 10px;font-size:13px;border-radius:8px;cursor:pointer;transition:all 0.15s; }
+  .schedule-mode-btn:hover { background:#f1f5f9; }
+  .schedule-mode-btn.active { background:var(--brand-primary);color:#fff;border-color:var(--brand-primary); }
+  
+  .modal-overlay {
+    position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);
+    display:flex;align-items:center;justify-content:center;z-index:1000;
+  }
+  .modal { background:#fff;border-radius:12px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.2);width:90%;max-height:80vh;display:flex;flex-direction:column; }
+  .modal-header { display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border); }
+  .modal-header h3 { margin:0;font-size:16px; }
+  .modal-close { background:none;border:none;font-size:24px;cursor:pointer;color:var(--text-secondary);padding:0;line-height:1; }
+  .modal-close:hover { color:var(--text-primary); }
+  .modal-body { padding:16px 20px;overflow-y:auto;flex:1; }
+  .modal-footer { padding:12px 20px;border-top:1px solid var(--border); }
+  
+  .badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600; }
+  .badge-pending { background:#fef3c7;color:#92400e; }
+  .badge-draft { background:#dbeafe;color:#1e40af; }
+  .badge-approved { background:#d1fae5;color:#065f46; }
+  .badge-sent { background:#e0e7ff;color:#3730a3; }
+  .badge-bounced { background:#fee2e2;color:#991b1b; }
+  .badge-opened { background:#ede9fe;color:#5b21b6; }
+  
+  .action-btn { padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px;transition:all 0.15s; }
+  .action-btn:hover { background:#f1f5f9; }
+  .action-btn-approve { border-color:#10b981;color:#065f46; }
+  .action-btn-approve:hover { background:#d1fae5; }
+  .action-btn-approve.active { background:#10b981;color:#fff; }
+  .action-btn-approve.active:hover { background:#059669; }
+  .action-btn-danger { border-color:#ef4444;color:#991b1b; }
+  .action-btn-danger:hover { background:#fee2e2; }
+
+  th.sortable { cursor:pointer;user-select:none;white-space:nowrap; }
+  th.sortable:hover { background:#f1f5f9; }
+  th.sortable .sort-icon { display:inline-block;width:16px;text-align:center;font-size:11px;color:var(--text-secondary);margin-left:4px; }
+  th.sortable .sort-icon::after { content:'↕';opacity:0.3; }
+  th.sortable.sort-asc .sort-icon::after { content:'↑';opacity:1;color:var(--brand-primary);font-weight:700; }
+  th.sortable.sort-desc .sort-icon::after { content:'↓';opacity:1;color:var(--brand-primary);font-weight:700; }
+  
+  #workflowTable { table-layout:fixed;width:100%; }
+  #workflowTable td { vertical-align:middle;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  #workflowTable td:first-child { text-align:center;overflow:visible; }
+  #workflowTable td:nth-child(2) { text-align:center; }
+  #workflowTable td:nth-child(8) { text-align:center;overflow:visible; }
+  #workflowTable td:nth-child(9) { text-align:center;overflow:visible; }
+  #workflowTable td:nth-child(10) { white-space:nowrap;overflow:visible; }
+  #workflowTable th { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .subject-cell { max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:var(--brand-primary); }
+  .subject-cell:hover { text-decoration:underline; }
+  
+  .followup-badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;cursor:pointer; }
+  .followup-badge:hover { opacity:0.8; }
+  .followup-pending { background:#fef3c7;color:#92400e; }
+  .followup-sent { background:#e0e7ff;color:#3730a3; }
+  .followup-none { background:#f1f5f9;color:#94a3b8; }
+  
+  .page-num { padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px; }
+  .page-num.active { background:var(--brand-primary);color:#fff;border-color:var(--brand-primary); }
+  .page-num:hover:not(.active) { background:#f1f5f9; }
+  
+  .followup-step { padding:12px 16px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px; }
+  .followup-step.sent { border-left:3px solid var(--success); }
+  .followup-step.pending { border-left:3px solid var(--warning); }
+  .followup-step.cancelled { border-left:3px solid var(--danger);opacity:0.6; }
+  .followup-step.not-scheduled { border-left:3px solid var(--border);opacity:0.5; }
+</style>
+
+<script>
+const CAMPAIGN_ID = <%= campaign.id %>;
+let companies = [];
+let currentPage = 1, totalPages = 1, totalCount = 0;
+let sortBy = "nome_studio", sortOrder = "asc";
+let availableCompanies = [];
+let isLoadingMore = false;
+let scheduleTargetId = null;
+let scheduleMode = 'single';
+
+// ── URL sync ──
+function loadSortFromURL() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.has('sort')) sortBy = p.get('sort');
+  if (p.has('order')) sortOrder = p.get('order') === 'asc' ? 'asc' : 'desc';
+  if (p.has('filter')) document.getElementById('workflowFilter').value = p.get('filter');
+  if (p.has('search')) document.getElementById('workflowSearch').value = p.get('search');
+}
+function pushSortURL() {
+  const p = new URLSearchParams();
+  if (sortBy !== 'nome_studio') p.set('sort', sortBy);
+  if (sortOrder !== 'asc') p.set('order', sortOrder);
+  const filter = document.getElementById('workflowFilter').value;
+  const search = document.getElementById('workflowSearch').value;
+  if (filter && filter !== 'all') p.set('filter', filter);
+  if (search) p.set('search', search);
+  const qs = p.toString();
+  const url = qs ? window.location.pathname + '?' + qs : window.location.pathname;
+  window.history.replaceState(null, '', url);
+}
+// Apply sort icon to active header
+function applySortIndicator() {
+  document.querySelectorAll('#workflowTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    const icon = th.querySelector('.sort-icon');
+    if (th.dataset.sort === sortBy) {
+      th.classList.add(sortOrder === 'asc' ? 'sort-asc' : 'sort-desc');
+    } else {
+      icon.textContent = '';
+    }
+  });
+}
+loadSortFromURL();
+applySortIndicator();
+
+async function loadCompanies(page, append) {
+  if (page) currentPage = page;
+  if (isLoadingMore) return;
+  isLoadingMore = append || false;
+  const filter = document.getElementById('workflowFilter').value;
+  const search = document.getElementById('workflowSearch').value;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies?page=${currentPage}&limit=50&filter=${encodeURIComponent(filter)}&search=${encodeURIComponent(search)}&sort_by=${sortBy}&sort_order=${sortOrder}`);
+    const data = await res.json();
+    totalPages = data.pages;
+    totalCount = data.total;
+    if (append) {
+      companies = companies.concat(data.companies);
+      document.getElementById('workflowTbody').insertAdjacentHTML('beforeend', renderCompaniesRows(data.companies, currentPage));
+    } else {
+      companies = data.companies;
+      renderCompanies();
+    }
+    updateKpis(data.kpi);
+    updateBatchButtons();
+    document.getElementById('totalCompaniesCount').textContent = `${totalCount} aziende totali`;
+    isLoadingMore = false;
+    if (currentPage < totalPages) {
+      observer.observe(document.getElementById('scrollSentinel'));
+    }
+  } catch (e) {
+    isLoadingMore = false;
+    if (!append) document.getElementById('workflowTbody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--danger);">Errore caricamento aziende</td></tr>';
+  }
+}
+
+function renderCompanies() {
+  if (companies.length === 0) {
+    const filter = document.getElementById('workflowFilter').value;
+    const search = document.getElementById('workflowSearch').value;
+    let msg = 'Nessun azienda trovato';
+    if (!search && filter === 'approved') msg = '🎉 Tutti i aziende approvati sono già pianificati! Vai su "📅 Pianificati" per vederli, oppure approva nuove bozze con "✓ Appr.".';
+    else if (!search && filter === 'scheduled') msg = 'Nessun azienda pianificato in attesa di invio. Approva le bozze (✓ Appr.) e poi pianificali con "📅 Pian.".';
+    document.getElementById('workflowTbody').innerHTML = `<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-secondary);">${msg}</td></tr>`;
+    return;
+  }
+  document.getElementById('workflowTbody').innerHTML = renderCompaniesRows(companies, 1);
+}
+
+function renderCompaniesRows(list, startNum) {
+  let html = '';
+  list.forEach((d, i) => {
+    let badge = '', badgeClass = '';
+    let blockIcon = '';
+    if (d.failed_count > 0) { badge = '❌ Fallito'; badgeClass = 'badge-bounced'; }
+    else if (d.email_bounced) { badge = '📧 Invalida'; badgeClass = 'badge-bounced'; }
+    else if (d.email_opened_at) { badge = '👁️ Aperta'; badgeClass = 'badge-opened'; }
+    else if (d.inviato) { badge = '📤 Inviato'; badgeClass = 'badge-sent'; }
+    else if (d.approvato) { 
+      badge = '✅ Approvato'; badgeClass = 'badge-approved';
+      if (d.block_reasons && d.block_reasons.includes('cold_richiede_invio_manuale')) {
+        blockIcon = ' <span style="color:#0ea5e9;cursor:help;font-size:11px;" title="Consenso cold: invio SOLO one-to-one manuale (mai in folle automatiche)">❄️</span>';
+      } else if (d.block_reasons && d.block_reasons.includes('non_schedulato')) {
+        blockIcon = ' <span style="color:#d97706;cursor:help;font-size:11px;" title="Approvato ma senza data di invio — clicca 📅 per pianificare">⚠️</span>';
+      }
+    }
+    else if (d.bozza_creata) { badge = '📝 Bozza'; badgeClass = 'badge-draft'; }
+    else if (d.bozza_failed_count > 0) { badge = '⚠️ Fallita'; badgeClass = 'badge-bounced'; }
+    else { badge = '⏳ In attesa'; badgeClass = 'badge-pending'; }
+    
+    // Tooltip diagnostico
+    let titleAttr = '';
+    if (d.block_reasons && d.block_reasons.length > 0) {
+      const labels = {
+        'già_inviato': 'Email già inviata',
+        'disiscritto': 'Azienda disiscritto',
+        'email_mancante': 'Email mancante',
+        'bozza_mancante': 'Bozza non generata',
+        'non_approvato': 'Non approvato',
+        'invio_fallito': '❌ Invio fallito (' + d.failed_count + ' tentativi)',
+        'cold_richiede_invio_manuale': '❄️ Consenso cold: invio solo manuale one-to-one',
+        'non_schedulato': 'Data invio non pianificata',
+        'pronto': 'Pronto per l\'invio',
+        'nessun_smtp': 'Nessun account SMTP attivo'
+      };
+      titleAttr = ' title="' + d.block_reasons.map(r => labels[r] || r).join(' · ') + '"';
+      // Aggiungi ultimo errore nel tooltip se presente
+      if (d.last_error) {
+        titleAttr = titleAttr.slice(0, -1) + '\\nUltimo errore: ' + d.last_error.slice(0, 120) + '"';
+      }
+    }
+    
+    const name = [d.nome_studio, d.nome_azienda].filter(Boolean).join(' - ') || '—';
+    const city = [d.comune, d.provincia].filter(Boolean).join(' (') + (d.provincia ? ')' : '') || '—';
+    
+    // Followup badge — detailed status indicators
+    let followupHtml = '';
+    const fuApproved = d.followup_approved || 0;
+    const fuDraftPending = d.followup_draft_pending || 0;
+    const fuPending = d.followup_pending || 0;
+    const fuSent = d.followup_sent || 0;
+    if (fuApproved > 0 || fuDraftPending > 0 || fuSent > 0 || fuPending > 0) {
+      let parts = [];
+      if (fuApproved > 0) parts.push(`<span style="color:#10b981;" title="Approvati">✅${fuApproved}</span>`);
+      if (fuDraftPending > 0) parts.push(`<span style="color:#d97706;" title="Bozza pronta, in attesa approvazione">⏳${fuDraftPending}</span>`);
+      if (fuSent > 0) parts.push(`<span style="color:#6366f1;" title="Inviati">📤${fuSent}</span>`);
+      if (fuPending > 0 && fuDraftPending === 0) parts.push(`<span style="color:#94a3b8;" title="In attesa generazione">⏳${fuPending}</span>`);
+      followupHtml = `<span class="followup-badge" data-id="${d.id}" data-action="showFollowups" title="Click per dettaglio followup" style="background:#f1f5f9;color:#475569;font-size:11px;display:inline-flex;gap:4px;">${parts.join(' ')}</span>`;
+    } else {
+      followupHtml = `<span class="followup-badge followup-none" data-id="${d.id}" data-action="showFollowups">—</span>`;
+    }
+    
+    // Schedule cell
+    let scheduleHtml = '<span style="color:var(--text-secondary);font-size:11px;">—</span>';
+    if (d.send_scheduled_at) {
+      const dt = new Date(d.send_scheduled_at);
+      scheduleHtml = `<span style="font-size:11px;color:var(--brand-primary);cursor:pointer;" data-id="${d.id}" data-action="openScheduleDatePicker" title="Clicca per cambiare data">📅 ${dt.toLocaleDateString('it-IT', {day:'2-digit',month:'short'})} ${dt.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'})}</span>`;
+    } else if (!d.inviato) {
+      scheduleHtml = `<button class="action-btn" data-id="${d.id}" data-action="openScheduleDatePicker" title="Pianifica invio" style="font-size:11px;">📅</button>`;
+    }
+    
+    // Schedulabile = non inviato, non già pianificato, non bloccato (cold/fallito)
+    const schedulable = !d.inviato && !d.send_scheduled_at && !(d.block_reasons || []).some(r => ['cold_richiede_invio_manuale','invio_fallito'].includes(r));
+    
+    html += `<tr>
+      <td><input type="checkbox" class="companyCheckbox" value="${d.id}" data-approved="${d.approvato}" data-draft="${d.bozza_creata}" data-sent="${d.inviato}" data-schedulable="${schedulable}"></td>
+      <td style="color:var(--text-secondary);font-size:11px;">${(startNum-1)*50+i+1}</td>
+      <td><strong style="font-size:13px;">${name}</strong></td>
+      <td style="font-size:11px;">${d.email || '—'}${d.email ? `<span style="cursor:pointer;margin-left:4px;font-size:12px;color:var(--text-secondary);" data-id="${d.id}" data-action="editEmail" title="Cambia email">✏️</span>` : ''}${d.inviato && d.sent_email_subject ? `<span style="cursor:pointer;margin-left:4px;font-size:14px;color:#22c55e;" onclick="viewSentEmail(${d.id})" title="Vedi email inviata">📨</span>` : ''}</td>
+      <td style="font-size:11px;">${city}</td>
+      <td><span class="badge ${badgeClass}"${titleAttr}>${badge}${blockIcon}</span></td>
+      <td>${d.bozza_email_oggetto ? `<span class="subject-cell" data-id="${d.id}" data-action="previewDraft" title="Clicca per vedere la bozza">${d.bozza_email_oggetto}</span>` : '<span style="color:var(--text-secondary);font-size:11px;">—</span>'}</td>
+      <td style="text-align:center;">${followupHtml}</td>
+      <td style="text-align:center;">${scheduleHtml}</td>
+      <td style="white-space:nowrap;">${renderActions(d)}</td>
+    </tr>`;
+  });
+  return html;
+}
+
+function renderActions(d) {
+  let actions = '';
+  if (d.bozza_creata && d.bozza_email) {
+    actions += `<button class="action-btn" data-id="${d.id}" data-action="previewDraft" title="Anteprima bozza">👁️</button> `;
+  }
+  if (d.bozza_creata && !d.inviato) {
+    const activeClass = d.approvato ? ' active' : '';
+    const label = d.approvato ? '✓ Approvato' : '○ Approva';
+    actions += `<button class="action-btn action-btn-approve${activeClass}" data-id="${d.id}" data-action="toggleApprove">${label}</button> `;
+  }
+  if (!d.inviato) {
+    actions += `<button class="action-btn" data-id="${d.id}" data-action="regenerateDraft" title="Rigenera bozza">🔄</button> `;
+  }
+  if (d.bozza_failed_count > 2) {
+    actions += `<button class="action-btn" data-id="${d.id}" data-action="resetFailedCount" title="Sblocca azienda (azzecca contatore fallimenti AI)" style="border-color:#f59e0b;color:#92400e;">🔓 Sblocca</button> `;
+  }
+  actions += `<button class="action-btn action-btn-danger" data-id="${d.id}" data-action="removeFromCampaign" title="Rimuovi">✕</button>`;
+  return actions || '<span style="color:var(--text-secondary);font-size:11px;">—</span>';
+}
+
+function updateKpis(kpi) {
+  if (!kpi) return;
+  document.getElementById('kpiTotal').textContent = kpi.total;
+  document.getElementById('kpiDraft').textContent = kpi.with_draft;
+  document.getElementById('kpiApproved').textContent = kpi.approved;
+  document.getElementById('kpiScheduled').textContent = kpi.scheduled || 0;
+  document.getElementById('kpiSent').textContent = kpi.sent;
+  document.getElementById('kpiOpened').textContent = kpi.opened;
+  document.getElementById('kpiBounced').textContent = kpi.bounced;
+  document.getElementById('kpiFailed').textContent = kpi.failed || 0;
+
+  // Diagnostic alerts
+  let alerts = '';
+  if (kpi.failed > 0) {
+    alerts += `<div class="alert alert-danger" style="padding:10px 16px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      ❌ <strong>${kpi.failed} aziende</strong> con invio fallito. Passa il mouse sul badge <strong>"❌ Fallito"</strong> nella tabella per vedere l'errore. <a href="?filter=failed" style="color:#991b1b;font-weight:bold;">Vedi tutti →</a>
+    </div>`;
+  }
+  if (kpi.approved_not_scheduled > 0) {
+    alerts += `<div class="alert alert-warning" style="padding:10px 16px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      ⚠️ <strong>${kpi.approved_not_scheduled} aziende approvati</strong> ma senza data di invio pianificata. 
+      Usa il pulsante 📅 per impostare la data di partenza, oppure selezionali e usa <strong>"Pian."</strong> in blocco.
+    </div>`;
+  }
+  if (kpi.approved_cold > 0) {
+    alerts += `<div class="alert alert-info" style="padding:10px 16px;border-radius:8px;background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      ❄️ <strong>${kpi.approved_cold} aziende approvati</strong> con consenso <strong>cold</strong> (né marketing né opt-in verificato): non entrano nelle folle/schedulazione automatica. Vanno inviati <strong>solo manualmente one-to-one</strong> (flusso "Invio manuale" dal dettaglio azienda).
+      <span style="font-size:11px;color:#0ea5e9;">(Vedi tooltip ❄️ nei badge)</span>
+    </div>`;
+  }
+  if (kpi.smtp_available === false) {
+    alerts += `<div class="alert alert-danger" style="padding:10px 16px;border-radius:8px;background:#fee2e2;border:1px solid #ef4444;color:#991b1b;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      🚫 <strong>Nessun account SMTP attivo!</strong> Le email non possono essere inviate. 
+      Vai su <a href="/admin/smtp-accounts" style="color:#991b1b;font-weight:bold;">Amministrazione → Account SMTP</a> per configurarne uno.
+    </div>`;
+  }
+  document.getElementById('diagnosticAlerts').innerHTML = alerts;
+}
+
+// Infinite scroll via IntersectionObserver
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && currentPage < totalPages && !isLoadingMore) {
+    currentPage++;
+    loadCompanies(null, true);
+  }
+}, { rootMargin: '400px' });
+
+function toggleSelectAll() {
+  const checked = document.getElementById('selectAllCompanies').checked;
+  document.querySelectorAll('.companyCheckbox').forEach(cb => cb.checked = checked);
+  updateBatchButtons();
+  document.getElementById('selectN').value = '0';
+}
+
+function selectFirstN(n) {
+  if (n <= 0) return;
+  const checkboxes = Array.from(document.querySelectorAll('.companyCheckbox'));
+  let selected = 0;
+  checkboxes.forEach(cb => {
+    const canSelect = cb.dataset.schedulable === 'true';
+    cb.checked = canSelect && selected < n;
+    if (cb.checked) selected++;
+  });
+  updateBatchButtons();
+  document.getElementById('selectAllCompanies').checked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+  if (selected === 0) {
+    showToast('❌ Nessun azienda pianificabile in questa lista (tutti già pianificati o bloccati)', 'error');
+  } else if (selected < n) {
+    showToast(`⚠️ Selezionati ${selected} aziende pianificabili — ${n - selected} saltati perché già pianificati o bloccati`, 'warning');
+  }
+}
+
+async function removeAllNoEmail() {
+  if (!confirm('🗑️ Rimuovere TUTTI i aziende senza email da questa campagna?')) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/remove-noemail`, { method: 'POST' });
+    const data = await res.json();
+    if (data.removed > 0) {
+      showToast(`🗑️ Rimossi ${data.removed} aziende senza email`, 'success');
+      loadCompanies(1);
+    } else {
+      showToast('Nessun azienda senza email da rimuovere', 'info');
+    }
+  } catch (e) {
+    showToast('❌ Errore rimozione', 'error');
+  }
+}
+
+function updateBatchButtons() {
+  const checked = document.querySelectorAll('.companyCheckbox:checked');
+  const count = checked.length;
+  document.getElementById('btnBatchApprove').disabled = count === 0;
+  document.getElementById('btnBatchRegen').disabled = count === 0;
+  document.getElementById('btnBatchSchedule').disabled = count === 0;
+  document.getElementById('btnBatchRemove').disabled = count === 0;
+  document.getElementById('btnBatchFollowupGenerate').disabled = count === 0;
+  document.getElementById('btnBatchFollowupApprove').disabled = count === 0;
+}
+
+function getSelectedIds() {
+  return Array.from(document.querySelectorAll('.companyCheckbox:checked')).map(cb => parseInt(cb.value));
+}
+
+async function batchAction(action) {
+  const ids = getSelectedIds();
+  if (ids.length === 0) { showToast('❌ Seleziona almeno un azienda', 'error'); return; }
+  const labels = { approve: 'approvare', unapprove: 'revocare', regenerate: 'rigenerare', remove: 'rimuovere' };
+  if (!confirm(`${labels[action] || action} ${ids.length} aziende selezionati?`)) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, company_ids: ids })
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast('❌ ' + (data.error || 'Errore esecuzione'), 'error'); return; }
+    if (data.updated === 0) { showToast('⚠️ Nessun azienda aggiornato', 'warning'); return; }
+    showToast(`✅ ${data.updated} aziende ${action === 'remove' ? 'rimossi' : action === 'regenerate' ? 'in rigenerazione' : 'aggiornati'}`, 'success');
+    document.getElementById('selectAllCompanies').checked = false;
+    if (action === 'regenerate') {
+      setTimeout(() => loadCompanies(), 4000);
+    } else {
+      await loadCompanies();
+    }
+  } catch (e) {
+    showToast('❌ Errore azione batch: ' + e.message, 'error');
+  }
+}
+
+// ── Batch Followup Actions ──
+async function batchFollowupGenerate() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) { showToast('❌ Seleziona almeno un azienda', 'error'); return; }
+  if (!confirm(`Generare bozze followup per ${ids.length} aziende selezionati?`)) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/generate-followup-drafts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_ids: ids })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) { showToast('❌ ' + (data.error || 'Errore generazione followup'), 'error'); return; }
+    showToast(`🔄 Generazione followup avviata per ${ids.length} aziende`, 'info');
+    document.getElementById('selectAllCompanies').checked = false;
+    setTimeout(() => loadCompanies(), 5000);
+  } catch (e) { showToast('❌ Errore di rete: ' + e.message, 'error'); }
+}
+
+async function batchFollowupApprove() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) { showToast('❌ Seleziona almeno un azienda', 'error'); return; }
+  if (!confirm(`Approvare le bozze followup per ${ids.length} aziende selezionati?`)) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/batch-followup-approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_ids: ids, approvato: true })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showToast('❌ ' + (data.error || 'Errore approvazione batch'), 'error'); return; }
+    if (data.updated === 0) { showToast('⚠️ Nessun followup da approvare', 'warning'); return; }
+    showToast(`✅ ${data.updated || 0} followup approvati`, 'success');
+    document.getElementById('selectAllCompanies').checked = false;
+    await loadCompanies();
+  } catch (e) { showToast('❌ Errore di rete: ' + e.message, 'error'); }
+}
+
+// Sort by column
+// ── Column sorting ──
+document.querySelectorAll('#workflowTable th.sortable').forEach(th => {
+  th.addEventListener('click', function() {
+    const field = this.dataset.sort;
+    if (sortBy === field) {
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortBy = field;
+      sortOrder = 'asc';
+    }
+    applySortIndicator();
+    pushSortURL();
+    loadCompanies(1);
+  });
+});
+
+// ── Preview Draft ──
+async function previewDraft(companyId) {
+  const d = companies.find(x => x.id === companyId);
+  if (!d || !d.bozza_email) return;
+  document.getElementById('previewTitle').textContent = `Bozza: ${d.bozza_email_oggetto || 'Senza oggetto'}`;
+  document.getElementById('previewContent').textContent = d.bozza_email;
+  document.getElementById('previewModal').style.display = 'flex';
+}
+
+// ── View Sent Email ──
+async function viewSentEmail(companyId) {
+  try {
+    const res = await fetch(`/api/companies/${companyId}/sent-email`);
+    if (!res.ok) { showToast('Email inviata non trovata', 'error'); return; }
+    const data = await res.json();
+    const d = data.company;
+    document.getElementById('sentEmailTitle').textContent = `📨 Email inviata — ${d.nome_azienda || 'Azienda'}`;
+    document.getElementById('sentEmailMeta').innerHTML = `
+      <strong>Oggetto:</strong> ${escapeHtml(d.sent_email_subject)}<br>
+      <strong>Destinatario:</strong> ${escapeHtml(d.email)}<br>
+      <strong>Inviata il:</strong> ${d.inviato_at ? new Date(d.inviato_at).toLocaleString('it-IT') : '—'}
+    `;
+    document.getElementById('sentEmailContent').textContent = d.sent_email_body || '(nessun contenuto)';
+    document.getElementById('sentEmailModal').style.display = 'flex';
+  } catch (e) {
+    showToast('Errore: ' + e.message, 'error');
+  }
+}
+
+// ── Show Followups ──
+async function showFollowups(companyId) {
+  const d = companies.find(x => x.id === companyId);
+  const name = [d?.nome_studio, d?.nome_azienda].filter(Boolean).join(' - ') || 'Azienda';
+  document.getElementById('followupTitle').textContent = `Followup — ${name}`;
+  document.getElementById('followupBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-secondary);">Caricamento...</div>';
+  document.getElementById('followupModal').style.display = 'flex';
+  
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followups`);
+    const steps = await res.json();
+    if (steps.length === 0) {
+      document.getElementById('followupBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-secondary);">Nessun followup configurato per questa campagna.</div>';
+      return;
+    }
+    let html = '';
+    steps.forEach(s => {
+      const statusClass = s.status === 'sent' ? 'sent' : s.status === 'pending' ? 'pending' : s.status === 'cancelled' ? 'cancelled' : 'not-scheduled';
+      let statusLabel = '';
+      if (s.sent_at) statusLabel = '✅ Inviato ' + new Date(s.sent_at).toLocaleDateString('it-IT');
+      else if (s.cancelled_at) statusLabel = `❌ Cancellato (${s.cancel_reason || 'n/a'})`;
+      else if (s.scheduled_at) statusLabel = `⏳ Programma: ${new Date(s.scheduled_at).toLocaleDateString('it-IT')}`;
+      else statusLabel = '— Non programmato';
+
+      html += `<div class="followup-step ${statusClass}" data-company-id="${companyId}" data-step-order="${s.step_order}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <strong>Followup #${s.step_order}</strong>
+          <span style="font-size:11px;color:var(--text-secondary);">Dopo ${s.delay_days} giorni — ${statusLabel}</span>
+        </div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:4px;color:var(--text-secondary);">
+          📋 Template: ${escapeHtml(s.template_subject || '(nessun oggetto)')}
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);white-space:pre-wrap;max-height:50px;overflow-y:auto;margin-bottom:8px;padding:6px 10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+          ${s.template_body ? escapeHtml(s.template_body.substring(0, 200) + (s.template_body.length > 200 ? '...' : '')) : '(nessun template)'}
+        </div>`;
+
+      // Se c'è una bozza per-azienda, mostra il contenuto personalizzato
+      if (s.draft_generato && s.draft_subject) {
+        const approvedBadge = s.draft_approvato
+          ? '<span style="color:#10b981;font-size:12px;">✅ Approvato</span>'
+          : '<span style="color:#d97706;font-size:12px;">⏳ In attesa approvazione</span>';
+
+        html += `
+        <div class="draft-container" style="margin-top:8px;padding:8px 12px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;">
+          <div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:4px;">📧 Bozza personalizzata:</div>
+          <div class="draft-view" data-step="${s.step_order}">
+            <div class="draft-subject-display" style="font-size:13px;font-weight:500;margin-bottom:4px;">${escapeHtml(s.draft_subject)}</div>
+            <div class="draft-body-display" style="font-size:12px;color:var(--text-secondary);white-space:pre-wrap;max-height:100px;overflow-y:auto;padding:4px 0;">${escapeHtml(s.draft_body ? s.draft_body.substring(0, 300) + (s.draft_body.length > 300 ? '...' : '') : '(nessun contenuto)')}</div>
+          </div>
+          <div class="draft-edit" data-step="${s.step_order}" style="display:none;margin-bottom:8px;">
+            <input type="text" class="draft-edit-subject" value="${escapeHtml(s.draft_subject)}" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;">
+            <textarea class="draft-edit-body" rows="6" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;">${escapeHtml(s.draft_body || '')}</textarea>
+          </div>
+          <div style="margin-top:6px;">${approvedBadge}</div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="action-btn action-btn-approve ${s.draft_approvato ? 'active' : ''}"
+                    onclick="toggleFollowupDraftApprove(${d.id}, ${s.step_order}, ${!s.draft_approvato})"
+                    style="font-size:11px;padding:3px 8px;">
+              ${s.draft_approvato ? '✓ Revoca' : '○ Approva'}
+            </button>
+            <button class="action-btn" onclick="regenerateFollowupDraft(${d.id}, ${s.step_order})"
+                    style="font-size:11px;padding:3px 8px;">🔄 Rigenera</button>
+            <button class="action-btn draft-edit-btn" data-step="${s.step_order}" style="font-size:11px;padding:3px 8px;">✏️ Modifica</button>
+            <button class="action-btn draft-save-btn" data-step="${s.step_order}" style="font-size:11px;padding:3px 8px;display:none;background:#10b981;color:#fff;border-color:#10b981;">💾 Salva</button>
+            <button class="action-btn draft-cancel-btn" data-step="${s.step_order}" style="font-size:11px;padding:3px 8px;display:none;">❌ Annulla</button>
+            <button class="action-btn" onclick="previewFollowupDraft(${d.id}, ${s.step_order})"
+                    style="font-size:11px;padding:3px 8px;">👁️ Preview</button>
+          </div>
+        </div>`;
+      } else if (s.sent_at) {
+        // Step already sent — show sent content link
+        html += `<div style="margin-top:8px;padding:8px 12px;background:#e0e7ff;border-radius:6px;border:1px solid #c7d2fe;">
+          <div style="font-size:12px;color:#3730a3;margin-bottom:4px;">📨 Followup inviato</div>
+          <button class="action-btn" onclick="viewSentFollowup(${d.id}, ${s.step_order})" style="font-size:11px;padding:3px 8px;">📨 Vedi inviato</button>
+        </div>`;
+      } else {
+        html += `<div style="margin-top:6px;"><span style="color:#94a3b8;font-size:12px;">⏳ In attesa generazione</span></div>`;
+      }
+
+      html += `</div>`;
+    });
+    document.getElementById('followupBody').innerHTML = html;
+
+    // One-time event delegation for inline edit/save/cancel buttons (prevent stacking)
+    if (!document.getElementById('followupBody').dataset._editDelegation) {
+      document.getElementById('followupBody').dataset._editDelegation = '1';
+      document.getElementById('followupBody').addEventListener('click', async function(e) {
+        const editBtn = e.target.closest('.draft-edit-btn');
+        const saveBtn = e.target.closest('.draft-save-btn');
+        const cancelBtn = e.target.closest('.draft-cancel-btn');
+        if (editBtn) {
+          const step = parseInt(editBtn.dataset.step);
+          toggleDraftEdit(step, true);
+        } else if (saveBtn) {
+          const step = parseInt(saveBtn.dataset.step);
+          const stepEl = e.target.closest('.followup-step');
+          const did = parseInt(stepEl?.dataset.companyId);
+          if (did) await saveDraftInline(did, step);
+        } else if (cancelBtn) {
+          const step = parseInt(cancelBtn.dataset.step);
+          toggleDraftEdit(step, false);
+        }
+      });
+    }
+  } catch (e) {
+    document.getElementById('followupBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);">Errore caricamento followup</div>';
+  }
+}
+
+// ── Toggle draft edit mode ──
+function toggleDraftEdit(step, showEdit) {
+  const container = document.querySelector(`.draft-container[data-step="${step}"]`);
+  if (!container) return;
+  const viewEl = container.querySelector(`.draft-view[data-step="${step}"]`);
+  const editEl = container.querySelector(`.draft-edit[data-step="${step}"]`);
+  const editBtn = container.querySelector(`.draft-edit-btn[data-step="${step}"]`);
+  const saveBtn = container.querySelector(`.draft-save-btn[data-step="${step}"]`);
+  const cancelBtn = container.querySelector(`.draft-cancel-btn[data-step="${step}"]`);
+  if (!viewEl || !editEl) return;
+  viewEl.style.display = showEdit ? 'none' : '';
+  editEl.style.display = showEdit ? '' : 'none';
+  if (editBtn) editBtn.style.display = showEdit ? 'none' : '';
+  if (saveBtn) saveBtn.style.display = showEdit ? '' : 'none';
+  if (cancelBtn) cancelBtn.style.display = showEdit ? '' : 'none';
+}
+
+// ── Save draft inline ──
+async function saveDraftInline(companyId, stepOrder) {
+  const container = document.querySelector(`.draft-container[data-step="${stepOrder}"]`);
+  if (!container) return;
+  const subject = container.querySelector('.draft-edit-subject').value;
+  const body = container.querySelector('.draft-edit-body').value;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followup-drafts/${stepOrder}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, body })
+    });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || 'Errore salvataggio', 'error'); return; }
+    showToast(`Followup #${stepOrder} salvato`, 'success');
+    showFollowups(companyId); // reload modal
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── Preview Followup Draft (with merge tags resolved) ──
+async function previewFollowupDraft(companyId, stepOrder) {
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followup-drafts/${stepOrder}/preview`);
+    if (!res.ok) { showToast('Impossibile caricare anteprima', 'error'); return; }
+    const data = await res.json();
+    document.getElementById('previewTitle').textContent = `👁️ Preview Followup #${stepOrder}`;
+    let content = `<div style="margin-bottom:12px;"><strong>Oggetto:</strong> ${escapeHtml(data.subject)}</div>`;
+    content += `<div style="white-space:pre-wrap;font-size:14px;line-height:1.6;">${escapeHtml(data.body)}</div>`;
+    document.getElementById('previewContent').innerHTML = content;
+    document.getElementById('previewModal').style.display = 'flex';
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── View Sent Followup Content ──
+async function viewSentFollowup(companyId, stepOrder) {
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followups/sent`);
+    if (!res.ok) { showToast('Followup inviato non trovato', 'error'); return; }
+    const steps = await res.json();
+    const s = steps.find(x => x.step_order === stepOrder);
+    if (!s) { showToast('Followup inviato non trovato per questo step', 'error'); return; }
+    document.getElementById('sentEmailTitle').textContent = `📨 Followup #${stepOrder} inviato`;
+    const d = companies.find(x => x.id === companyId);
+    const name = [d?.nome_studio, d?.nome_azienda].filter(Boolean).join(' - ') || 'Azienda';
+    document.getElementById('sentEmailMeta').innerHTML = `
+      <strong>Destinatario:</strong> ${escapeHtml(name)}<br>
+      <strong>Inviato il:</strong> ${s.sent_at ? new Date(s.sent_at).toLocaleString('it-IT') : '—'}<br>
+      <strong>Oggetto:</strong> ${escapeHtml(s.sent_subject || '(nessun oggetto)')}
+    `;
+    document.getElementById('sentEmailContent').textContent = s.sent_body || '(nessun contenuto)';
+    document.getElementById('sentEmailModal').style.display = 'flex';
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── Toggle Approve Followup Draft ──
+async function toggleFollowupDraftApprove(companyId, stepOrder, approvato) {
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followup-drafts/${stepOrder}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvato })
+    });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || 'Errore', 'error'); return; }
+    showToast(`Followup #${stepOrder} ${approvato ? 'approvato' : 'revocato'}`, 'success');
+    showFollowups(companyId); // ricarica modale
+    loadCompanies(); // aggiorna tabella
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── Regenerate Followup Draft ──
+async function regenerateFollowupDraft(companyId, stepOrder) {
+  if (!confirm(`Rigenerare followup #${stepOrder} per questo azienda?`)) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/followup-drafts/${stepOrder}/regenerate`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || 'Errore', 'error'); return; }
+    showToast(`Followup #${stepOrder} in rigenerazione...`, 'info');
+    setTimeout(() => {
+      showFollowups(companyId);
+      loadCompanies();
+    }, 5000);
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// Helper: escape HTML
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Toggle Approve ──
+async function toggleApprove(companyId) {
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/approve`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || 'Errore approvazione', 'error'); return; }
+    await loadCompanies();
+    showToast(data.approvato ? '✅ Azienda approvato' : '⏸️ Approvazione revocata', 'success');
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── Regenerate Draft ──
+async function regenerateDraft(companyId) {
+  if (!confirm('Rigenerare bozza per questo azienda?')) return;
+  try {
+    await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}/regenerate`, { method: 'POST' });
+    showToast('Bozza in rigenerazione...', 'info');
+    setTimeout(() => loadCompanies(), 3000);
+  } catch (e) { showToast('Errore rigenerazione', 'error'); }
+}
+
+// ── Reset Failed Count (sblocca azienda bloccato da AI outage) ──
+async function resetFailedCount(companyId) {
+  if (!confirm('Sbloccare questo azienda? Verrà rimarcato per rigenerazione bozza.')) return;
+  try {
+    const res = await fetch(`/api/companies/${companyId}/reset-failed`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) { showToast(data.error || 'Errore', 'error'); return; }
+    showToast('Azienda sbloccato, bozza in rigenerazione...', 'success');
+    setTimeout(() => loadCompanies(), 3000);
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+// ── Remove from Campaign ──
+async function removeFromCampaign(companyId) {
+  if (!confirm('Rimuovere dalla campagna?')) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${companyId}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); showToast('❌ ' + (d.error || 'Errore rimozione'), 'error'); return; }
+    showToast('🗑️ Azienda rimosso dalla campagna', 'success');
+    await loadCompanies();
+  } catch (e) { showToast('❌ Errore rimozione: ' + e.message, 'error'); }
+}
+
+// ── Action loading state (previene doppi click) ──
+function withLoading(btnId, promise) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return promise;
+  const origText = btn.textContent;
+  const origDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.textContent = '⏳...';
+  return promise.finally(() => {
+    btn.disabled = origDisabled;
+    btn.textContent = origText;
+  });
+}
+
+// ── Generate All Drafts ──
+async function generateAllDrafts() {
+  if (!confirm('Generare bozze per tutti i aziende senza bozza? Le approvazioni verranno resettate.')) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/generate-drafts`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { showToast('❌ ' + (data.error || 'Errore generazione'), 'error'); return; }
+    if (data.marked === 0) { showToast('⚠️ Nessun azienda da generare (tutti già con bozza o in coda)', 'warning'); return; }
+    showToast(`🔄 Generazione avviata per ${data.marked} aziende.`, 'info');
+    setTimeout(() => loadCompanies(), 5000);
+  } catch (e) { showToast('❌ Errore: ' + e.message, 'error'); }
+}
+
+// ── Add Companies Modal ──
+async function openAddCompaniesModal() {
+  document.getElementById('addCompaniesModal').style.display = 'flex';
+  await loadRegionFilter();
+  await loadProvinceFilter();
+  await loadAvailableCompanies();
+}
+function closeAddCompaniesModal() { document.getElementById('addCompaniesModal').style.display = 'none'; }
+
+async function loadProvinceFilter() {
+  try {
+    const res = await fetch('/api/provinces');
+    const data = await res.json();
+    const sel = document.getElementById('addCompanyProvincia');
+    sel.innerHTML = '<option value="">Tutte le province</option>';
+    (data || []).forEach(p => { sel.innerHTML += `<option value="${p.sigla_provincia}">${p.sigla_provincia}</option>`; });
+  } catch (_) {}
+}
+
+async function loadRegionFilter() {
+  try {
+    const res = await fetch('/api/regions');
+    const data = await res.json();
+    const sel = document.getElementById('addCompanyRegione');
+    sel.innerHTML = '<option value="">Tutte le regioni</option>';
+    (data || []).forEach(r => { sel.innerHTML += `<option value="${r}">${r}</option>`; });
+  } catch (_) {}
+}
+
+async function loadAvailableCompanies() {
+  try {
+    const search = document.getElementById('addCompanySearch').value;
+    const provincia = document.getElementById('addCompanyProvincia').value;
+    const regione = document.getElementById('addCompanyRegione').value;
+    let url = `/api/campaigns/${CAMPAIGN_ID}/available-companies?limit=500`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (provincia) url += `&provincia=${encodeURIComponent(provincia)}`;
+    if (regione) url += `&regione=${encodeURIComponent(regione)}`;
+    const res = await fetch(url);
+    availableCompanies = await res.json();
+    if (availableCompanies.length === 0) {
+      document.getElementById('availableCompaniesTbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary);">Nessun azienda disponibile</td></tr>';
+      return;
+    }
+    let html = '';
+    availableCompanies.forEach(d => {
+      const name = [d.nome_studio, d.nome_azienda].filter(Boolean).join(' - ') || '—';
+      html += `<tr>
+        <td><input type="checkbox" class="availableCheckbox" value="${d.id}"></td>
+        <td>${name}</td>
+        <td style="font-size:12px;">${d.email || '—'}</td>
+        <td style="font-size:12px;">${d.comune || '—'}</td>
+        <td style="font-size:12px;">${d.provincia || '—'}</td>
+      </tr>`;
+    });
+    document.getElementById('availableCompaniesTbody').innerHTML = html;
+    updateSelectedCount();
+  } catch (e) {
+    document.getElementById('availableCompaniesTbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--danger);">Errore</td></tr>';
+  }
+}
+
+function toggleAllAvailable() {
+  const checked = document.getElementById('selectAllAvailable').checked;
+  document.querySelectorAll('.availableCheckbox').forEach(cb => cb.checked = checked);
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const count = document.querySelectorAll('.availableCheckbox:checked').length;
+  document.getElementById('selectedCount').textContent = count > 0 ? `${count} aziende selezionati` : 'Nessun azienda selezionato';
+}
+
+async function addSelectedCompanies() {
+  const selected = Array.from(document.querySelectorAll('.availableCheckbox:checked')).map(cb => parseInt(cb.value));
+  if (selected.length === 0) { showToast('Seleziona almeno un azienda.', 'error'); return; }
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_ids: selected })
+    });
+    const data = await res.json();
+    showToast(`${data.updated} aziende aggiunti!`, 'success');
+    closeAddCompaniesModal();
+    await loadCompanies();
+  } catch (e) { showToast('Errore', 'error'); }
+}
+
+// ── Toast ──
+function showToast(msg, type) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.display = 'flex';
+  Object.assign(t.style, {
+    position:'fixed', bottom:'24px', right:'24px', padding:'12px 20px', borderRadius:'10px',
+    color:'#fff', fontSize:'14px', fontWeight:'500', zIndex:'9999', maxWidth:'400px',
+    boxShadow:'0 4px 12px rgba(0,0,0,0.2)', transition:'opacity 0.3s'
+  });
+  t.style.background = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+// ── Schedule send date ──
+function openScheduleDatePicker(companyId) {
+  scheduleTargetId = companyId;
+  // Modalità singola: nascondi il toggle stessa data / spalma
+  document.getElementById('scheduleModeToggle').style.display = 'none';
+  setScheduleMode('single');
+  const d = companies.find(x => x.id === companyId);
+  const name = [d?.nome_studio, d?.nome_azienda].filter(Boolean).join(' - ') || 'Azienda';
+  document.getElementById('scheduleTitle').textContent = `Pianifica invio — ${name}`;
+  document.getElementById('scheduleDesc').textContent = 'Scegli data e ora per l\'invio della prima email';
+  // Preselect existing date if present
+  const picker = document.getElementById('scheduleDatePicker');
+  picker.value = d?.send_scheduled_at ? new Date(new Date(d.send_scheduled_at).getTime() - new Date(d.send_scheduled_at).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  document.getElementById('scheduleModal').style.display = 'flex';
+}
+
+// ── Schedule mode toggle (stessa data / spalma sul mese) ──
+function setScheduleMode(mode) {
+  scheduleMode = mode;
+  document.getElementById('scheduleSingleFields').style.display = mode === 'single' ? '' : 'none';
+  document.getElementById('scheduleSpreadFields').style.display = mode === 'spread' ? '' : 'none';
+  document.getElementById('btnModeSingle').classList.toggle('active', mode === 'single');
+  document.getElementById('btnModeSpread').classList.toggle('active', mode === 'spread');
+  if (mode === 'spread') updateSpreadPreview();
+}
+
+// Calcola giorni lavorativi e data finale per la preview (stessa logica del backend)
+function businessDaysCount(startISO, n, perDay) {
+  const offset = Math.max(0, Math.ceil(n / perDay) - 1);
+  let dt = new Date(startISO + 'T12:00:00Z');
+  let added = 0;
+  while (added < offset) {
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    const dow = dt.getUTCDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return { days: offset + 1, end: dt.toISOString().slice(0, 10) };
+}
+
+function updateSpreadPreview() {
+  const start = document.getElementById('spreadStartDate').value;
+  const perDay = parseInt(document.getElementById('spreadPerDay').value, 10) || 0;
+  const n = (window._batchScheduleIds || []).length;
+  const el = document.getElementById('spreadPreview');
+  if (!start || perDay < 1 || n === 0) {
+    el.textContent = 'Seleziona data di partenza, email al giorno e almeno un azienda.';
+    return;
+  }
+  const { days, end } = businessDaysCount(start, n, perDay);
+  const fmt = (s) => { const [yy, mm, dd] = s.split('-'); return `${dd}/${mm}/${yy}`; };
+  el.textContent = `📊 ${n} email → ${perDay} al giorno → ${days} giorni lavorativi (dal ${fmt(start)} al ${fmt(end)})`;
+}
+
+async function saveScheduleSpread() {
+  const ids = window._batchScheduleIds;
+  if (!ids || ids.length === 0) { showToast('❌ Seleziona almeno un azienda', 'error'); return; }
+  const start = document.getElementById('spreadStartDate').value;
+  const hour = document.getElementById('spreadHour').value;
+  const perDay = parseInt(document.getElementById('spreadPerDay').value, 10);
+  if (!start) { showToast('❌ Scegli la data di partenza', 'error'); return; }
+  if (!perDay || perDay < 1) { showToast('❌ Indica quante email al giorno (min 1)', 'error'); return; }
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/batch-schedule-spread`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_ids: ids, start_date: start, hour: parseInt(hour, 10), per_day: perDay })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast('❌ ' + (data.error || 'Errore programmazione'), 'error');
+      return;
+    }
+    const s = data.spread;
+    const fmt = (x) => { const [yy, mm, dd] = x.split('-'); return `${dd}/${mm}/${yy}`; };
+    let msg = `✅ ${data.updated} aziende programmati: ${s.per_day}/giorno dal ${fmt(s.start_date)} al ${fmt(s.end_date)} (${s.business_days} giorni lavorativi)`;
+    if (data.skipped_cold > 0) msg += `. ❄️ ${data.skipped_cold} saltati (consenso cold: richiedono invio manuale one-to-one)`;
+    showToast(msg, data.skipped_cold > 0 ? 'warning' : 'success');
+    closeModal('scheduleModal');
+    window._batchScheduleIds = null;
+    document.getElementById('selectAllCompanies').checked = false;
+    await loadCompanies();
+  } catch (e) { showToast('❌ Errore di rete: ' + e.message, 'error'); }
+}
+
+async function clearSchedule() {
+  if (!confirm('Rimuovere la data di programmazione?')) return;
+  try {
+    const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${scheduleTargetId}/schedule`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_at: null })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) { showToast('❌ ' + (data.error || 'Errore rimozione programmazione'), 'error'); return; }
+    showToast('✅ Programmazione rimossa', 'success');
+    closeModal('scheduleModal');
+    await loadCompanies();
+  } catch (e) { showToast('Errore di rete', 'error'); }
+}
+
+async function openBatchSchedule() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) { showToast('❌ Seleziona almeno un azienda', 'error'); return; }
+  window._batchScheduleIds = ids;
+  document.getElementById('scheduleTitle').textContent = `Pianifica invio per ${ids.length} aziende`;
+  document.getElementById('scheduleDesc').textContent = 'Scegli: stessa data per tutti, oppure spalma sul mese con un numero di email al giorno';
+  // Modalità batch: mostra il toggle e riparte da "stessa data"
+  document.getElementById('scheduleModeToggle').style.display = 'flex';
+  setScheduleMode('single');
+  const picker = document.getElementById('scheduleDatePicker');
+  picker.value = '';
+  document.getElementById('spreadStartDate').value = '';
+  document.getElementById('spreadPerDay').value = '10';
+  document.getElementById('scheduleModal').style.display = 'flex';
+}
+
+async function saveSchedule() {
+  if (scheduleMode === 'spread') {
+    return saveScheduleSpread();
+  }
+  const picker = document.getElementById('scheduleDatePicker');
+  const dateVal = picker.value;
+  if (!dateVal) { showToast('Seleziona una data', 'error'); return; }
+  
+  const batchIds = window._batchScheduleIds;
+  try {
+    if (batchIds && batchIds.length >= 1) {
+      const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/batch-schedule`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_ids: batchIds, scheduled_at: new Date(dateVal).toISOString() })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast('❌ ' + (data.error || 'Errore programmazione'), 'error');
+        return;
+      }
+      let msg = `✅ ${data.updated} aziende programmati per ${new Date(data.scheduled_at).toLocaleDateString('it-IT')}`;
+      if (data.skipped_cold > 0) msg += `. ❄️ ${data.skipped_cold} saltati (consenso cold: richiedono invio manuale one-to-one)`;
+      showToast(msg, data.skipped_cold > 0 ? 'warning' : 'success');
+      closeModal('scheduleModal');
+      window._batchScheduleIds = null;
+      document.getElementById('selectAllCompanies').checked = false;
+    } else {
+      // Single company from inline button — use scheduleTargetId
+      if (!scheduleTargetId) { showToast('❌ Nessun azienda selezionato', 'error'); return; }
+      const res = await fetch(`/api/campaigns/${CAMPAIGN_ID}/companies/${scheduleTargetId}/schedule`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: new Date(dateVal).toISOString() })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) { showToast('❌ ' + (data.error || 'Errore programmazione'), 'error'); return; }
+      showToast('✅ Data programmazione salvata!', 'success');
+      closeModal('scheduleModal');
+    }
+    await loadCompanies();
+  } catch (e) { showToast('❌ Errore di rete: ' + e.message, 'error'); }
+}
+
+// ── Edit email ──
+let editEmailTargetId = null;
+
+function openEditEmail(companyId) {
+  editEmailTargetId = companyId;
+  const d = companies.find(x => x.id === companyId);
+  if (!d) return;
+  document.getElementById('editEmailCompanyName').textContent = [d.nome_studio, d.nome_azienda].filter(Boolean).join(' - ') || 'Azienda';
+  document.getElementById('editEmailInput').value = d.email || '';
+  document.getElementById('editEmailFeedback').style.display = 'none';
+  document.getElementById('editEmailModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('editEmailInput').focus(), 100);
+}
+
+document.getElementById('btnSaveEditEmail').addEventListener('click', async () => {
+  const companyId = editEmailTargetId;
+  const newEmail = document.getElementById('editEmailInput').value.trim();
+  const feedback = document.getElementById('editEmailFeedback');
+  if (!newEmail || !newEmail.includes('@')) {
+    feedback.style.display = 'block';
+    feedback.style.color = '#ef4444';
+    feedback.textContent = '❌ Inserisci un indirizzo email valido';
+    return;
+  }
+  try {
+    const res = await fetch(`/api/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: newEmail })
+    });
+    const data = await res.json();
+    if (data.success || data.id) {
+      showToast('✅ Email aggiornata! Rigenera la bozza con "Rig."', 'success');
+      closeModal('editEmailModal');
+      await loadCompanies();
+    } else {
+      feedback.style.display = 'block';
+      feedback.style.color = '#ef4444';
+      feedback.textContent = '❌ ' + (data.error || 'Errore sconosciuto');
+    }
+  } catch (e) {
+    feedback.style.display = 'block';
+    feedback.style.color = '#ef4444';
+    feedback.textContent = '❌ Errore di rete';
+  }
+});
+
+document.getElementById('btnCancelEditEmail').addEventListener('click', () => closeModal('editEmailModal'));
+document.getElementById('btnCloseEditEmail').addEventListener('click', () => closeModal('editEmailModal'));
+// Enter key saves
+document.getElementById('editEmailInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnSaveEditEmail').click();
+});
+
+// ── Modal close helper ──
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.style.display = 'none';
+  }
+});
+
+// ── Event delegation: workflow table (dynamic rows) ──
+document.getElementById('workflowTbody').addEventListener('click', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  const id = parseInt(target.dataset.id);
+  switch (target.dataset.action) {
+    case 'previewDraft': previewDraft(id); break;
+    case 'showFollowups': showFollowups(id); break;
+    case 'openScheduleDatePicker': openScheduleDatePicker(id); break;
+    case 'editEmail': openEditEmail(id); break;
+    case 'toggleApprove': toggleApprove(id); break;
+    case 'regenerateDraft': regenerateDraft(id); break;
+    case 'resetFailedCount': resetFailedCount(id); break;
+    case 'removeFromCampaign': removeFromCampaign(id); break;
+  }
+});
+document.getElementById('workflowTbody').addEventListener('change', function(e) {
+  if (e.target.classList.contains('companyCheckbox')) {
+    updateBatchButtons();
+  }
+});
+
+// ── Event delegation: available companies table (dynamic rows) ──
+document.getElementById('availableCompaniesTbody').addEventListener('change', function(e) {
+  if (e.target.classList.contains('availableCheckbox')) {
+    updateSelectedCount();
+  }
+});
+
+// ── Static element event listeners ──
+document.getElementById('btnOpenAddCompanies').addEventListener('click', openAddCompaniesModal);
+document.getElementById('btnGenerateAllDrafts').addEventListener('click', function() { withLoading('btnGenerateAllDrafts', generateAllDrafts()); });
+document.getElementById('btnBatchApprove').addEventListener('click', function() { withLoading('btnBatchApprove', batchAction('approve')); });
+document.getElementById('btnBatchRegen').addEventListener('click', function() { withLoading('btnBatchRegen', batchAction('regenerate')); });
+document.getElementById('btnBatchSchedule').addEventListener('click', function() { withLoading('btnBatchSchedule', openBatchSchedule()); });
+document.getElementById('btnBatchRemove').addEventListener('click', function() { withLoading('btnBatchRemove', batchAction('remove')); });
+document.getElementById('btnBatchFollowupGenerate').addEventListener('click', function() { withLoading('btnBatchFollowupGenerate', batchFollowupGenerate()); });
+document.getElementById('btnBatchFollowupApprove').addEventListener('click', function() { withLoading('btnBatchFollowupApprove', batchFollowupApprove()); });
+document.getElementById('workflowFilter').addEventListener('change', function() { 
+  loadCompanies(1);
+  pushSortURL();
+  document.getElementById('btnRemoveNoEmail').style.display = this.value === 'noemail' ? 'inline-block' : 'none';
+});
+document.getElementById('workflowSearch').addEventListener('keydown', function(e) { if (e.key === 'Enter') { loadCompanies(1); pushSortURL(); } });
+document.getElementById('btnSearchCompanies').addEventListener('click', function() { loadCompanies(1); pushSortURL(); });
+document.getElementById('btnResetFilters').addEventListener('click', function() {
+  document.getElementById('workflowFilter').value = 'all';
+  document.getElementById('workflowSearch').value = '';
+  document.getElementById('btnRemoveNoEmail').style.display = 'none';
+  sortBy = 'nome_studio';
+  sortOrder = 'asc';
+  applySortIndicator();
+  pushSortURL();
+  loadCompanies(1);
+});
+document.getElementById('btnRemoveNoEmail').addEventListener('click', removeAllNoEmail);
+document.getElementById('selectAllCompanies').addEventListener('change', toggleSelectAll);
+document.getElementById('selectN').addEventListener('change', function() {
+  const n = parseInt(this.value);
+  selectFirstN(n);
+});
+document.getElementById('btnModeSingle').addEventListener('click', function() { setScheduleMode('single'); });
+document.getElementById('btnModeSpread').addEventListener('click', function() { setScheduleMode('spread'); });
+document.getElementById('spreadStartDate').addEventListener('change', updateSpreadPreview);
+document.getElementById('spreadPerDay').addEventListener('input', updateSpreadPreview);
+document.getElementById('spreadHour').addEventListener('change', updateSpreadPreview);
+document.getElementById('btnModalCloseAddCompanies').addEventListener('click', closeAddCompaniesModal);
+document.getElementById('addCompanySearch').addEventListener('input', loadAvailableCompanies);
+document.getElementById('addCompanyRegione').addEventListener('change', loadAvailableCompanies);
+document.getElementById('addCompanyProvincia').addEventListener('change', loadAvailableCompanies);
+document.getElementById('selectAllAvailable').addEventListener('change', toggleAllAvailable);
+document.getElementById('btnCancelAddCompanies').addEventListener('click', closeAddCompaniesModal);
+document.getElementById('btnAddSelectedCompanies').addEventListener('click', addSelectedCompanies);
+document.getElementById('btnClosePreview').addEventListener('click', function() { closeModal('previewModal'); });
+document.getElementById('btnCloseFollowup').addEventListener('click', function() { closeModal('followupModal'); });
+document.getElementById('btnCloseSchedule').addEventListener('click', function() { closeModal('scheduleModal'); });
+document.getElementById('btnCancelSchedule').addEventListener('click', function() { closeModal('scheduleModal'); });
+document.getElementById('btnClearSchedule').addEventListener('click', clearSchedule);
+document.getElementById('btnSaveSchedule').addEventListener('click', saveSchedule);
+
+// Sent email modal close
+document.getElementById('btnCloseSentEmail').addEventListener('click', function() { closeModal('sentEmailModal'); });
+
+// ── Init ──
+loadCompanies(1);
+</script>

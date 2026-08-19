@@ -1,0 +1,487 @@
+<div class="page-header">
+  <h1><%= t('dashboard.title') %></h1>
+  <span style="font-size: 14px; color: var(--text-secondary);">
+    <%= user?.name || '' %>
+  </span>
+</div>
+
+<% if (stats) { %>
+<% function sparkline(data, width, height) {
+  if (!data || data.length < 2) return '';
+  const max = Math.max(...data, 1);
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - (v / max) * height}`).join(' ');
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><polyline fill="none" stroke="#4f46e5" stroke-width="2" points="${points}"/></svg>`;
+} %>
+<div class="kpi-grid">
+  <a href="/companies" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.total %></div>
+    <div class="kpi-label"><%= t('dashboard.total_companies') %></div>
+    <% if (stats.dailySparkline && stats.dailySparkline.length > 1) { %><div style="margin-top:8px;"><%- sparkline(stats.dailySparkline.map(d=>d.totali), 120, 30) %></div><% } %>
+  </a>
+  <a href="/companies" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.conEmail %></div>
+    <div class="kpi-label"><%= t('dashboard.with_email') %></div>
+    <% if (stats.dailySparkline && stats.dailySparkline.length > 1) { %><div style="margin-top:8px;"><%- sparkline(stats.dailySparkline.map(d=>d.totali), 120, 30) %></div><% } %>
+  </a>
+  <a href="/companies?bozza=true" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.conBozza %></div>
+    <div class="kpi-label"><%= t('dashboard.drafts') %></div>
+    <% if (stats.dailySparkline && stats.dailySparkline.length > 1) { %><div style="margin-top:8px;"><%- sparkline(stats.dailySparkline.map(d=>d.bozze), 120, 30) %></div><% } %>
+  </a>
+  <a href="/companies?approvato=true&inviato=false" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.approvati %></div>
+    <div class="kpi-label"><%= t('dashboard.approved') %></div>
+    <% if (stats.dailySparkline && stats.dailySparkline.length > 1) { %><div style="margin-top:8px;"><%- sparkline(stats.dailySparkline.map(d=>d.approvati), 120, 30) %></div><% } %>
+  </a>
+  <a href="/companies?inviato=true" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.inviati %></div>
+    <div class="kpi-label"><%= t('dashboard.sent') %></div>
+    <% if (stats.dailySparkline && stats.dailySparkline.length > 1) { %><div style="margin-top:8px;"><%- sparkline(stats.dailySparkline.map(d=>d.inviati), 120, 30) %></div><% } %>
+  </a>
+  <a href="/municipalities" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.comuniEseguiti %>/<%= stats.totalComuni %></div>
+    <div class="kpi-label"><%= t('dashboard.municipalities_processed') %></div>
+    <div style="margin-top:8px;"></div>
+  </a>
+  <a href="/admin/queue" class="kpi-card" style="text-decoration:none;color:inherit;">
+    <div class="kpi-value"><%= stats.followupPending %></div>
+    <div class="kpi-label"><%= t('dashboard.followup_scheduled') %></div>
+    <div style="margin-top:8px;"></div>
+  </a>
+</div>
+
+<% if (stats.inviati > 0) { %>
+<div class="kpi-grid">
+  <div class="kpi-card" style="border-top: 3px solid var(--brand-primary);">
+    <div class="kpi-value"><%= stats.openRate %>%</div>
+    <div class="kpi-label"><%= t('dashboard.open_rate') %> (<%= stats.aperti %>)</div>
+  </div>
+  <div class="kpi-card" style="border-top: 3px solid var(--success);">
+    <div class="kpi-value"><%= stats.clickRate %>%</div>
+    <div class="kpi-label"><%= t('dashboard.click_rate') %> (<%= stats.cliccati %>)</div>
+  </div>
+  <div class="kpi-card" style="border-top: 3px solid var(--danger);">
+    <div class="kpi-value"><%= stats.bounceRate %>%</div>
+    <div class="kpi-label"><%= t('dashboard.bounce_rate') %> (<%= stats.bounced %>)</div>
+  </div>
+</div>
+<% } %>
+
+<% if (typeof stats.followupPending !== 'undefined' && stats.followupPending > 0) { %>
+<div class="card" style="padding:12px 16px;background:#fef3c7;border:1px solid #f59e0b;">
+  <span style="font-size:13px;font-weight:500;color:#92400e;">
+    ⏳ <%= t('dashboard.queue.header') %> <%= stats.followupPending %> <%= t('dashboard.queue.pending') %> | <%= stats.pendingApproval || 0 %> <%= t('dashboard.queue.waiting_approval') %> | <%= stats.readyToSend || 0 %> <%= t('dashboard.queue.ready') %>
+  </span>
+</div>
+<% } %>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;"><%= t('dashboard.funnel') %></h3>
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <% const funnelMax = Math.max(stats.total, 1); %>
+    <div><strong><%= t('dashboard.funnel.found') %></strong> <span style="float:right"><%= stats.total %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(stats.total / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.with_email') %></strong> <span style="float:right"><%= stats.conEmail %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(stats.conEmail / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.draft') %></strong> <span style="float:right"><%= stats.conBozza %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(stats.conBozza / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.approved') %></strong> <span style="float:right"><%= stats.approvati %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(stats.approvati / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.sent') %></strong> <span style="float:right"><%= stats.inviati %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--success);border-radius:4px;width:<%= Math.round(stats.inviati / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.opened') %></strong> <span style="float:right"><%= stats.aperti || 0 %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--success);border-radius:4px;width:<%= Math.round((stats.aperti || 0) / funnelMax * 100) %>%"></div></div></div>
+    <div><strong><%= t('dashboard.funnel.clicked') %></strong> <span style="float:right"><%= stats.cliccati || 0 %></span><div style="margin-top:4px;height:20px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--success);border-radius:4px;width:<%= Math.round((stats.cliccati || 0) / funnelMax * 100) %>%"></div></div></div>
+  </div>
+</div>
+
+<% if (stats.dailySends && stats.dailySends.length > 0) { %>
+<% const maxDaily = Math.max(...stats.dailySends.map(d => d.cnt), 1); %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;"><%= t('dashboard.daily_sends') %></h3>
+  <div style="overflow-x: auto;">
+  <table>
+    <thead><tr><th><%= t('dashboard.day') %></th><th><%= t('dashboard.sends') %></th><th></th></tr></thead>
+    <tbody>
+      <% stats.dailySends.forEach(d => { %>
+      <tr>
+        <td><%= new Date(d.giorno).toLocaleDateString('it-IT') %></td>
+        <td><%= d.cnt %></td>
+        <td><div style="height:16px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(d.cnt / maxDaily * 100) %>%"></div></div></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+<% } %>
+
+<% if (stats.provinceDist && stats.provinceDist.length > 0) { %>
+<% const maxProv = Math.max(...stats.provinceDist.map(p => p.cnt), 1); %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Distribuzione province (invii)</h3>
+  <div style="overflow-x: auto;">
+  <table>
+    <thead><tr><th>Provincia</th><th><%= t('dashboard.sends') %></th><th></th></tr></thead>
+    <tbody>
+      <% stats.provinceDist.forEach(p => { %>
+      <tr>
+        <td><%= p.provincia %></td>
+        <td><%= p.cnt %></td>
+        <td><div style="height:16px;background:var(--bg-body);border-radius:4px;overflow:hidden"><div style="height:100%;background:var(--brand-gradient);border-radius:4px;width:<%= Math.round(p.cnt / maxProv * 100) %>%"></div></div></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+<% } %>
+
+<% if (stats.provinceDetail && stats.provinceDetail.length > 0) { %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Dettaglio Province</h3>
+  <div style="overflow-x: auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>Provincia</th>
+        <th>Totale</th>
+        <th>Bozze</th>
+        <th>% Bozze</th>
+        <th>Approvate</th>
+        <th>Inviate</th>
+        <th>% Invio</th>
+        <th>Aperte</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% stats.provinceDetail.forEach(p => { %>
+      <tr>
+        <td><a href="/companies?provincia=<%= encodeURIComponent(p.provincia) %>"><strong><%= p.provincia %></strong></a></td>
+        <td><%= p.totale %></td>
+        <td><%= p.bozze %></td>
+        <td><%= p.totale > 0 ? Math.round(p.bozze / p.totale * 100) : 0 %>%</td>
+        <td><%= p.approvate %></td>
+        <td><%= p.inviate %></td>
+        <td><%= p.totale > 0 ? Math.round(p.inviate / p.totale * 100) : 0 %>%</td>
+        <td><%= p.aperte %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+<% } %>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Prossime Azioni</h3>
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span><%= stats.pendingApproval %> bozze da approvare</span>
+      <a href="/companies?approvato=false&bozza=true" class="btn btn-primary btn-sm">&rarr;</a>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span><%= stats.readyToSend %> email pronte da inviare</span>
+      <a href="/companies?approvato=true&inviato=false" class="btn btn-primary btn-sm">&rarr;</a>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <a href="/admin/queue" style="color:inherit;text-decoration:none;"><span><%= stats.overdueFollowups %> follow-up scaduti</span></a>
+      <a href="/direzione" class="btn btn-primary btn-sm">&rarr;</a>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span><%= stats.unprocessedMunicipalities %> comuni da processare</span>
+      <a href="/municipalities?eseguito=false" class="btn btn-primary btn-sm">&rarr;</a>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="campaignHealthCard">
+  <h3 style="margin-bottom:16px;">Salute campagne attive</h3>
+  <div id="campaignHealthContent"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+<script>
+async function loadCampaignHealth() {
+  try {
+    var res = await fetch('/api/campaigns/health');
+    var data = await res.json();
+    if (!data.length) {
+      document.getElementById('campaignHealthContent').innerHTML = '<p style="color:var(--text-secondary);">Nessuna campagna attiva.</p>';
+      return;
+    }
+    var html = '';
+    data.forEach(function(c) {
+      var bounceRate = c.inviate > 0 ? ((c.bounced / c.inviate) * 100).toFixed(1) : 0;
+      var openRate = c.inviate > 0 ? ((c.aperte / c.inviate) * 100).toFixed(1) : 0;
+      var bounceAlert = bounceRate > 5;
+      var colorStyle = bounceAlert ? 'color:var(--danger);' : '';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<div><strong>' + escapeHtml(c.name) + '</strong>' +
+        (bounceAlert ? '<span class="badge badge-danger" style="margin-left:8px;">⚠ Bounce alto</span>' : '') + '</div>' +
+        '<div style="display:flex;gap:16px;font-size:13px;color:var(--text-secondary);">' +
+        '<span>📤 ' + c.inviate + ' inv.</span>' +
+        '<span>👁 ' + openRate + '%</span>' +
+        '<span style="' + colorStyle + '">🔴 ' + bounceRate + '%</span>' +
+        '<a href="/campaigns/' + c.id + '" class="btn btn-sm btn-secondary">Dettaglio</a></div></div>';
+    });
+    document.getElementById('campaignHealthContent').innerHTML = html;
+  } catch(e) {}
+}
+loadCampaignHealth();
+</script>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Azioni rapide</h3>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <a href="/companies?bozza=false" class="btn btn-primary">Aziende senza bozza</a>
+    <a href="/companies?approvato=false&inviato=false" class="btn btn-secondary">Da approvare</a>
+    <a href="/companies?approvato=true&inviato=false" class="btn btn-secondary">Approvate da inviare</a>
+    <a href="/municipalities?eseguito=false" class="btn btn-secondary">Comuni da processare</a>
+    <% if (user?.role === 'superadmin') { %>
+    <form action="/admin/process-municipalities" method="post" style="display:inline" id="cronForm1">
+      <button type="submit" class="btn btn-secondary">Processa comuni ora</button>
+    </form>
+    <form action="/admin/generate-emails" method="post" style="display:inline" id="cronForm2">
+      <button type="submit" class="btn btn-secondary">Genera email ora</button>
+    </form>
+    <button class="btn btn-secondary" id="batchBtn">Invio batch</button>
+    <% } %>
+    <a href="/api/admin/report?period=7" class="btn btn-secondary" download>Esporta report CSV</a>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Coda Email</h3>
+  <div id="emailQueueWidget">
+    <p style="color: var(--text-secondary);">Caricamento...</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Prestazioni Cron</h3>
+  <div id="cronPerfWidget">
+    <p style="color: var(--text-secondary);">Caricamento...</p>
+  </div>
+</div>
+
+<div id="batchForm" class="card" style="display:none;">
+  <h3 style="margin-bottom: 16px;">Invio batch</h3>
+  <form id="batchSubmitForm">
+    <div class="filters">
+      <div class="filter-group">
+        <label>Provincia (opzionale)</label>
+        <select name="provincia">
+          <option value="">Tutte</option>
+          <% if (typeof allProvince !== 'undefined' && allProvince && allProvince.length > 0) { allProvince.forEach(p => { %>
+          <option value="<%= p.provincia %>"><%= p.provincia %></option>
+          <% }); } else { stats.provinceDist && stats.provinceDist.forEach(p => { %>
+          <option value="<%= p.provincia %>"><%= p.provincia %></option>
+          <% }); } %>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Limite</label>
+        <input type="number" name="limit" value="50" min="1" max="200">
+      </div>
+      <div class="filter-group">
+        <label>Delay (sec)</label>
+        <input type="number" name="delay_seconds" value="3" min="1" max="30">
+      </div>
+      <div class="filter-group">
+        <label>Limite giornaliero residuo</label>
+        <span id="dailyLimitLabel" style="padding:8px;font-size:14px;color:var(--text-secondary);">500 email/giorno</span>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Avvia batch</button>
+  </form>
+  <div id="batchProgress" style="display:none;margin-top:16px;">
+    <div style="margin-bottom:8px">Inviati: <span id="sentCount">0</span> / Falliti: <span id="failedCount">0</span> / In attesa: <span id="pendingCount">0</span></div>
+    <div style="height:24px;background:var(--bg-body);border-radius:4px;overflow:hidden">
+      <div id="progressBar" style="height:100%;background:var(--success);border-radius:4px;width:0%;transition:width 0.5s"></div>
+    </div>
+  </div>
+</div>
+
+<% } else { %>
+<div class="card">
+  <p style="color: var(--text-secondary);">Impossibile caricare le statistiche.</p>
+</div>
+<% } %>
+
+<script>
+function handleCronSubmit(e, form) {
+  e.preventDefault();
+  const apiUrl = form.id === 'cronForm1' ? '/api/cron/process-municipalities' : '/api/cron/generate-emails';
+  const btn = form.querySelector('button');
+  btn.disabled = true;
+  btn.textContent = 'Esecuzione...';
+  let timeoutId = setTimeout(() => {
+    btn.textContent = 'Ancora in esecuzione... (lungo)';
+  }, 30000);
+  showToast('Avviato. Operazioni lunghe possono richiedere alcuni minuti.', 'success');
+  fetch(apiUrl, { method: 'POST', credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+      clearTimeout(timeoutId);
+      if (data.success) {
+        showToast('Operazione completata con successo');
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+      }
+    })
+    .catch(() => {
+      clearTimeout(timeoutId);
+      showToast('Errore di connessione', 'error');
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Esegui';
+    });
+  return false;
+}
+
+function showBatchForm() {
+  document.getElementById('batchForm').style.display = 'block';
+  document.getElementById('batchForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function startBatch(e) {
+  e.preventDefault();
+  const form = document.getElementById('batchSubmitForm');
+  const data = Object.fromEntries(new FormData(form));
+  const btn = form.querySelector('button');
+
+  if (!confirm('Accodare ' + (data.limit || '50') + ' email per il batch' + (data.provincia ? ' in provincia ' + data.provincia : '') + '?')) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Avvio...';
+
+  try {
+    const res = await fetch('/api/campaigns/send-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (result.queued === undefined) throw new Error(result.error);
+    if (result.queued === 0) {
+      showToast('Nessun azienda da processare', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Avvia batch';
+      return;
+    }
+    showToast(`${result.queued} email accodate`);
+    startProgressSSE();
+  } catch (err) {
+    const ERROR_MAP = {
+      'Failed to fetch': 'Errore di connessione al server',
+      'NetworkError': 'Errore di rete',
+      'The operation was aborted': 'Richiesta timeout',
+      'timeout': 'Richiesta timeout',
+      'Load failed': 'Errore di caricamento',
+    };
+    showToast('Errore: ' + (ERROR_MAP[err.message] || err.message), 'error');
+    btn.disabled = false;
+    btn.textContent = 'Avvia batch';
+  }
+}
+
+function startProgressSSE() {
+  const progressDiv = document.getElementById('batchProgress');
+  progressDiv.style.display = 'block';
+  const evtSource = new EventSource('/api/campaigns/progress');
+  const sseTimeout = setTimeout(() => {
+    evtSource.close();
+    showToast('Timeout aggiornamento batch', 'error');
+  }, 300000);
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    document.getElementById('sentCount').textContent = data.sent;
+    document.getElementById('failedCount').textContent = data.failed;
+    document.getElementById('pendingCount').textContent = data.pending;
+    const total = data.sent + data.failed + data.pending;
+    const pct = total > 0 ? Math.round((data.sent + data.failed) / total * 100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+  };
+  evtSource.addEventListener('done', () => {
+    clearTimeout(sseTimeout);
+    evtSource.close();
+    showToast('Batch completato!');
+    setTimeout(() => location.reload(), 2000);
+  });
+  evtSource.onerror = () => {
+    clearTimeout(sseTimeout);
+    evtSource.close();
+    showToast('Connessione persa', 'error');
+  };
+}
+
+(function() {
+  function loadEmailQueue() {
+    fetch('/api/admin/diagnostics')
+      .then(r => r.json())
+      .then(data => {
+        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, function(m) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); }
+        const html = '<div style="display:flex;gap:16px;margin-bottom:12px;"><div><strong>Code</strong><br><span class="badge badge-info">' + esc(data.queue_pending) + '</span></div><div><strong>Sequence</strong><br><span class="badge badge-info">' + esc(data.sequences_pending) + '</span></div></div><table><thead><tr><th>Data</th><th>Azione</th><th>Risorsa</th></tr></thead><tbody>';
+        var auditHtml = '';
+        (data.recent_audit || []).slice(0, 3).forEach(function(e) {
+          auditHtml += '<tr><td>' + esc(e.created_at ? new Date(e.created_at).toLocaleString('it-IT') : '-') + '</td><td>' + esc(e.action || '') + '</td><td>' + esc(e.resource_id || '-') + '</td></tr>';
+        });
+        document.getElementById('emailQueueWidget').innerHTML = html + auditHtml + '</tbody></table>';
+      })
+      .catch(function() {
+        document.getElementById('emailQueueWidget').innerHTML = '<span style="color:var(--danger);font-weight:600;">Offline</span>';
+      });
+  }
+  loadEmailQueue();
+  setInterval(loadEmailQueue, 10000);
+})();
+
+fetch('/api/admin/settings').then(function(r){return r.json()}).then(function(settings) {
+  var s = settings.find(function(x) { return x.key === 'max_emails_per_day'; });
+  if (s && document.getElementById('dailyLimitLabel')) {
+    document.getElementById('dailyLimitLabel').textContent = (s.hasValue && s.value ? s.value : '500') + ' email/giorno';
+  }
+}).catch(function(){});
+
+(function() {
+  function loadCronPerf() {
+    fetch('/api/admin/cron-status')
+      .then(r => r.json())
+      .then(data => {
+        var names = [];
+        if (data.lastRuns) {
+          Object.keys(data.lastRuns).forEach(function(k) { if (names.indexOf(k) === -1) names.push(k); });
+        }
+        if (data.active) {
+          data.active.forEach(function(k) { if (names.indexOf(k) === -1) names.push(k); });
+        }
+        if (names.length === 0) {
+          document.getElementById('cronPerfWidget').innerHTML = '<p style="color:var(--text-secondary);">Nessun dato</p>';
+          return;
+        }
+        var html = '<table><thead><tr><th>Nome</th><th>Ultima esecuzione</th></tr></thead><tbody>';
+        names.forEach(function(name) {
+          var label = (typeof CRON_NAMES !== 'undefined' && CRON_NAMES[name]) || name;
+          var lastRun = data.lastRuns && data.lastRuns[name] ? data.lastRuns[name] : null;
+          var isActive = data.active && data.active.indexOf(name) !== -1;
+          var timeStr = 'mai';
+          if (lastRun) {
+            if (typeof lastRun === 'string' && lastRun.startsWith('ERR:')) {
+              timeStr = '<span class="badge badge-danger">Errore</span>';
+            } else {
+              var minAgo = Math.floor((Date.now() - new Date(lastRun).getTime()) / 60000);
+              timeStr = minAgo < 1 ? 'ora' : minAgo + 'm fa';
+            }
+          }
+          html += '<tr><td>' + label + (isActive ? ' <span class="badge badge-success">attivo</span>' : '') + '</td><td>' + timeStr + '</td></tr>';
+        });
+        document.getElementById('cronPerfWidget').innerHTML = html + '</tbody></table>';
+      })
+      .catch(function() {
+        document.getElementById('cronPerfWidget').innerHTML = '<span style="color:var(--danger);font-weight:600;">Offline</span>';
+      });
+  }
+  loadCronPerf();
+  setInterval(loadCronPerf, 10000);
+})();
+
+document.getElementById('cronForm1').addEventListener('submit', function(e) { handleCronSubmit(e, this); });
+document.getElementById('cronForm2').addEventListener('submit', function(e) { handleCronSubmit(e, this); });
+document.getElementById('batchBtn').addEventListener('click', showBatchForm);
+document.getElementById('batchSubmitForm').addEventListener('submit', startBatch);
+</script>

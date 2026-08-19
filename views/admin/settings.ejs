@@ -1,0 +1,495 @@
+<div class="page-header">
+  <h1>Impostazioni</h1>
+  <a href="javascript:history.back()" class="btn btn-secondary">← Indietro</a>
+</div>
+
+<div class="card" id="settingsContainer">
+  <p style="color: var(--text-secondary); margin-bottom: 16px;">Caricamento impostazioni...</p>
+</div>
+
+<div class="card" id="blacklistContainer">
+  <h3 style="margin-bottom: 16px;">Blacklist Pattern</h3>
+  <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+    I pattern vengono controllati sul contenuto delle email (oggetto + corpo). Le regex sono case-insensitive.
+  </p>
+  <div id="blacklistTable">
+    <p style="color: var(--text-secondary);">Caricamento...</p>
+  </div>
+  <div style="margin-top: 12px; display: flex; gap: 8px;">
+    <input type="text" id="newBlacklistPattern" placeholder="Nuovo pattern (regex)" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+    <input type="text" id="newBlacklistDesc" placeholder="Descrizione" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+    <button class="btn btn-sm btn-primary" id="addBlacklistBtn">Aggiungi</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Cache</h3>
+  <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+    Svuota la cache di scraping per forzare il recupero dei dati dai siti web.
+  </p>
+  <button class="btn btn-sm btn-secondary" id="clearCacheBtn">Svuota cache scraping</button>
+</div>
+
+<div class="card" id="aiStatsCard">
+  <h3 style="margin-bottom:16px;">Statistiche AI</h3>
+  <div id="aiStatsContent"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+const SECTIONS = [
+  {
+    id: 'smtp',
+    title: 'SMTP (Email)',
+    keys: [
+      { key: 'smtp_host', label: 'Host', type: 'text', sensitive: false },
+      { key: 'smtp_port', label: 'Porta', type: 'number', sensitive: false },
+      { key: 'smtp_user', label: 'Utente', type: 'text', sensitive: false },
+      { key: 'smtp_pass', label: 'Password', type: 'password', sensitive: true },
+      { key: 'email_from', label: 'Mittente', type: 'text', sensitive: false },
+    ]
+  },
+  {
+    id: 'openrouter',
+    title: 'OpenRouter (AI)',
+    keys: [
+      { key: 'openrouter_api_key', label: 'API Key', type: 'password', sensitive: true },
+      { key: 'openrouter_base_url', label: 'Base URL', type: 'text', sensitive: false },
+      { key: 'openrouter_model_extraction', label: 'Modello Estrazione', type: 'model-select', sensitive: false },
+      { key: 'openrouter_model_copywriter', label: 'Modello Copywriter', type: 'model-select', sensitive: false },
+      { key: 'openrouter_model_validator', label: 'Modello Validatore', type: 'model-select', sensitive: false },
+    ]
+  },
+  {
+    id: 'serper',
+    title: 'Serper.dev (Ricerca Aziende)',
+    keys: [
+      { key: 'serper_api_key', label: 'API Key', type: 'password', sensitive: true },
+      { key: 'serper_daily_limit', label: 'Limite giornaliero', type: 'number', sensitive: false },
+    ]
+  },
+  {
+    id: 'groq',
+    title: 'Groq (Validatore Fallback)',
+    keys: [
+      { key: 'groq_api_key', label: 'API Key', type: 'password', sensitive: true },
+    ]
+  },
+  {
+    id: 'outreach',
+    title: 'Outreach SMTP (Listmonk)',
+    keys: [
+      { key: 'outreach_smtp_host', label: 'Host', type: 'text', sensitive: false },
+      { key: 'outreach_smtp_port', label: 'Porta', type: 'number', sensitive: false },
+      { key: 'outreach_smtp_user', label: 'Utente', type: 'text', sensitive: false },
+      { key: 'outreach_smtp_pass', label: 'Password', type: 'password', sensitive: true },
+      { key: 'outreach_email_from', label: 'Mittente', type: 'text', sensitive: false },
+    ]
+  },
+  {
+    id: 'queue',
+    title: 'Coda Email',
+    keys: [
+      { key: 'queue_batch_size', label: 'Batch Size', type: 'number', sensitive: false },
+      { key: 'queue_delay_seconds', label: 'Delay (sec)', type: 'number', sensitive: false },
+      { key: 'max_emails_per_day', label: 'Max email/giorno', type: 'number', sensitive: false },
+    ]
+  },
+  {
+    id: 'guardrail',
+    title: 'Guardrail Automatici',
+    keys: [
+      { key: 'guardrail_bounce_rate_max', label: 'Bounce rate max (%)', type: 'number', sensitive: false },
+      { key: 'guardrail_consecutive_errors_max', label: 'Errori consecutivi max', type: 'number', sensitive: false },
+      { key: 'guardrail_send_window_start', label: 'Finestra invio inizio (HH:MM)', type: 'text', sensitive: false },
+      { key: 'guardrail_send_window_end', label: 'Finestra invio fine (HH:MM)', type: 'text', sensitive: false },
+    ]
+  },
+  {
+    id: 'general',
+    title: 'Generale',
+    keys: [
+      { key: 'magic_link_base_url', label: 'Magic Link Base URL', type: 'text', sensitive: false },
+      { key: 'log_level', label: 'Log Level', type: 'text', sensitive: false },
+      { key: 'scraper_allowed_domains', label: 'Domini consentiti scraper', type: 'text', sensitive: false },
+    ]
+  },
+  {
+    id: 'email-template',
+    title: 'Template Email Globale',
+    keys: [
+      { key: 'default_use_html', label: 'Usa HTML per tutte le campagne', type: 'text', sensitive: false },
+      { key: 'default_html_wrapper', label: 'HTML Wrapper globale (usa {{BODY}})', type: 'textarea', sensitive: false },
+      { key: 'default_footer_text', label: 'Footer globale (testo, usa {{UNSUB_URL}})', type: 'textarea', sensitive: false },
+      { key: 'default_footer_html', label: 'Footer globale (HTML)', type: 'textarea', sensitive: false },
+      { key: 'default_firma_testo', label: 'Firma globale (testo)', type: 'textarea', sensitive: false },
+      { key: 'default_firma_html', label: 'Firma globale (HTML)', type: 'textarea', sensitive: false },
+    ]
+  },
+  {
+    id: 'ai-prompts',
+    title: 'Prompts AI',
+    keys: [
+      { key: 'prompt_copywriter', label: 'Prompt Copywriter (generazione email)', type: 'textarea', sensitive: false },
+      { key: 'prompt_rewrite', label: 'Prompt Rewrite (riscrittura)', type: 'textarea', sensitive: false },
+      { key: 'prompt_validator', label: 'Prompt Validatore', type: 'textarea', sensitive: false },
+      { key: 'prompt_extraction', label: 'Prompt Estrazione (dati siti web)', type: 'textarea', sensitive: false },
+    ]
+  },
+];
+
+let availableModels = [];
+let currentSettings = [];
+let promptDefaults = {};
+
+async function load() {
+  try {
+    const res = await fetch('/api/admin/settings');
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error('Invalid response');
+    currentSettings = data;
+    render(data);
+    loadModels();
+    loadPromptDefaults();
+  } catch (err) {
+    document.getElementById('settingsContainer').innerHTML = '<p style="color: var(--danger);">Errore caricamento</p>';
+  }
+}
+
+function render(settings) {
+  const values = {};
+  const hasValues = {};
+  settings.forEach(s => { values[s.key] = s.value; hasValues[s.key] = s.hasValue; });
+
+  let html = '';
+  SECTIONS.forEach(section => {
+    html += `<h3 style="margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">${section.title}</h3>`;
+    html += '<div style="display: grid; gap: 12px;">';
+    section.keys.forEach(field => {
+      if (field.type === 'model-select') {
+        const val = values[field.key] || '';
+        const inputId = `input_${field.key}`;
+        html += `<div class="form-group" style="margin-bottom: 8px;">
+          <label for="${inputId}">${escapeHtml(field.label)} <small>(${escapeHtml(field.key)})</small></label>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="${inputId}" data-key="${escapeAttr(field.key)}"
+                    style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg-card);">
+              <option value="">— Seleziona modello —</option>
+              ${availableModels.map(m =>
+                `<option value="${escapeAttr(m.id)}" ${val === m.id ? 'selected' : ''}>${escapeHtml(m.id)} (ctx:${m.context_length}, $${m.prompt_cost}/${m.completion_cost}/1K)</option>`
+              ).join('')}
+            </select>
+            <button type="button" class="btn btn-sm btn-primary js-save-setting" data-key="${escapeAttr(field.key)}">Salva</button>
+          </div>
+        </div>`;
+        return;
+      }
+      if (field.type === 'textarea') {
+        const dbVal = values[field.key] || '';
+        const defaultVal = promptDefaults[field.key] || '';
+        const val = dbVal || defaultVal;
+        const isDefault = !dbVal && defaultVal;
+        const inputId = `input_${field.key}`;
+        html += `<div class="form-group" style="margin-bottom: 8px;">
+          <label for="${inputId}">${escapeHtml(field.label)} <small>(${escapeHtml(field.key)})</small>${isDefault ? ' <span style="color:var(--text-secondary);font-size:11px;">(default)</span>' : ''}</label>
+          <textarea id="${inputId}" rows="12" data-key="${escapeAttr(field.key)}"
+                    style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;resize:vertical;box-sizing:border-box;">${escapeHtml(val)}</textarea>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button type="button" class="btn btn-sm btn-primary js-save-setting" data-key="${escapeAttr(field.key)}">Salva</button>
+            <button type="button" class="btn btn-sm btn-secondary js-reset-prompt" data-key="${escapeAttr(field.key)}">Reset to default</button>
+          </div>
+        </div>`;
+        return;
+      }
+      const val = values[field.key] || '';
+      const hasVal = hasValues[field.key];
+      const inputId = `input_${field.key}`;
+      const isSensitive = field.sensitive;
+      const displayVal = isSensitive && hasVal ? '••••••••' : '';
+      const placeholder = isSensitive ? (hasVal ? 'Nuovo valore (lascia vuoto per mantenere)' : 'Non impostato') : (val || 'Non impostato');
+
+      html += `<div class="form-group" style="margin-bottom: 8px;">
+        <label for="${inputId}">${escapeHtml(field.label)} <small>(${escapeHtml(field.key)})</small></label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="${isSensitive ? 'password' : 'text'}" id="${inputId}" value="${escapeAttr(displayVal)}"
+                 placeholder="${escapeAttr(placeholder)}"
+                 style="flex: 1; ${isSensitive && hasVal ? 'color: var(--text-secondary);' : ''}"
+                 data-key="${escapeAttr(field.key)}" data-sensitive="${field.sensitive}"
+                 data-has-value="${hasVal}">
+          <button type="button" class="btn btn-sm btn-primary js-save-setting" data-key="${escapeAttr(field.key)}">Salva</button>
+          </div>
+      </div>`;
+    });
+    if (section.id === 'openrouter') {
+      html += `<div style="margin-top:8px;">
+        <button type="button" class="btn btn-sm btn-secondary js-load-models">🔄 Aggiorna lista modelli</button>
+        <span id="modelsCount" style="font-size:12px;color:var(--text-secondary);margin-left:8px;"></span>
+      </div>`;
+    }
+    html += '</div>';
+
+    if (section.id === 'smtp') {
+      html += '<div class="form-group" style="margin-bottom:8px;">';
+      html += '<button type="button" class="btn btn-sm btn-secondary js-test-smtp">Invia email di test</button>';
+      html += '<div id="testResult" style="font-size:13px;margin-top:4px;"></div>';
+      html += '</div>';
+    }
+  });
+
+  document.getElementById('settingsContainer').innerHTML = html;
+}
+
+async function saveSetting(key, btn) {
+  const input = document.getElementById('input_' + key);
+  let value = input.value;
+  const isSensitive = input.dataset.sensitive === 'true';
+  const hasValue = input.dataset.hasValue === 'true';
+
+  if (isSensitive && value === '••••••••') {
+    showToast('Nessuna modifica', 'success');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const res = await fetch('/api/admin/settings/' + encodeURIComponent(key), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('✓ ' + key + ' salvato');
+      if (isSensitive && value) {
+        input.value = '••••••••';
+        input.dataset.hasValue = 'true';
+        input.placeholder = 'Nuovo valore (lascia vuoto per mantenere)';
+      } else if (isSensitive && !value) {
+        input.dataset.hasValue = 'false';
+        input.placeholder = 'Non impostato';
+      } else if (!isSensitive) {
+        input.placeholder = value || 'Non impostato';
+      }
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Salva';
+}
+
+async function loadBlacklist() {
+  try {
+    const res = await fetch('/api/admin/blacklist');
+    const patterns = await res.json();
+    let html = '<table><thead><tr><th>Pattern</th><th>Descrizione</th><th>Bloccati</th><th>Attivo</th><th></th></tr></thead><tbody>';
+    patterns.forEach(p => {
+      html += `<tr>
+        <td><code>${escapeHtml(p.pattern)}</code></td>
+        <td>${escapeHtml(p.description || '—')}</td>
+        <td>${p.blocked_count}</td>
+        <td><input type="checkbox" ${p.is_active ? 'checked' : ''} class="js-toggle-blacklist" data-id="${p.id}"></td>
+        <td><button class="btn btn-sm btn-danger js-delete-blacklist" data-id="${p.id}">Elimina</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('blacklistTable').innerHTML = html;
+  } catch (err) {
+    document.getElementById('blacklistTable').innerHTML = '<p style="color: var(--danger);">Errore caricamento</p>';
+  }
+}
+
+async function addBlacklistPattern() {
+  const pattern = document.getElementById('newBlacklistPattern').value;
+  const description = document.getElementById('newBlacklistDesc').value;
+  if (!pattern.trim()) { showToast('Pattern richiesto', 'error'); return; }
+
+  try {
+    const res = await fetch('/api/admin/blacklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern, description })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('newBlacklistPattern').value = '';
+      document.getElementById('newBlacklistDesc').value = '';
+      showToast('Pattern aggiunto');
+      loadBlacklist();
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+async function toggleBlacklist(id, active) {
+  try {
+    await fetch(`/api/admin/blacklist/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: active })
+    });
+  } catch (_) {}
+}
+
+async function deleteBlacklist(id) {
+  if (!confirm('Eliminare questo pattern?')) return;
+  try {
+    await fetch(`/api/admin/blacklist/${id}`, { method: 'DELETE' });
+    showToast('Pattern eliminato');
+    loadBlacklist();
+  } catch (_) {
+    showToast('Errore', 'error');
+  }
+}
+
+load();
+loadBlacklist();
+
+async function clearCache() {
+  if (!confirm('Svuotare la cache di scraping? I dati verranno recuperati alla prossima richiesta.')) return;
+  try {
+    const res = await fetch('/api/admin/cache-clear', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) showToast('Cache svuotata');
+    else showToast('Errore', 'error');
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+async function testSmtp(event) {
+  if (!event) return;
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Invio...';
+  document.getElementById('testResult').textContent = '';
+  try {
+    const res = await fetch('/api/admin/settings/test/smtp', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('testResult').textContent = '✅ Email di test inviata a ' + (document.getElementById('input_email_from').value || 'utente');
+      showToast('Email di test inviata!');
+    } else {
+      document.getElementById('testResult').textContent = '❌ ' + (data.error || 'Errore');
+      showToast('Errore invio test', 'error');
+    }
+  } catch (err) {
+    document.getElementById('testResult').textContent = '❌ ' + err.message;
+    showToast('Errore di connessione', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Invia email di test';
+}
+
+async function loadAiStats() {
+  try {
+    const res = await fetch('/api/admin/ai-stats');
+    const data = await res.json();
+    const html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+      <div style="text-align:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+        <div style="font-size:28px;font-weight:700;color:var(--brand-primary);">${data.email_generate || 0}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">Email Generate</div>
+      </div>
+      <div style="text-align:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+        <div style="font-size:28px;font-weight:700;color:var(--brand-primary);">${data.email_rewrite || 0}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">Email Riscritte</div>
+      </div>
+      <div style="text-align:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+        <div style="font-size:28px;font-weight:700;color:var(--brand-primary);">${data.extraction || 0}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">Estrazioni</div>
+      </div>
+      <div style="text-align:center;padding:16px;background:var(--bg-body);border-radius:8px;">
+        <div style="font-size:28px;font-weight:700;color:var(--brand-primary);">${data.today_total || 0}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">Oggi</div>
+      </div>
+    </div>`;
+    document.getElementById('aiStatsContent').innerHTML = html;
+  } catch (err) {
+    document.getElementById('aiStatsContent').innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+loadAiStats();
+
+async function loadModels() {
+  try {
+    const res = await fetch('/api/admin/openrouter-models');
+    if (!res.ok) { document.getElementById('modelsCount').textContent = 'Errore caricamento'; return; }
+    availableModels = await res.json();
+    document.getElementById('modelsCount').textContent = availableModels.length + ' modelli disponibili';
+    render(currentSettings);
+  } catch (_) {
+    document.getElementById('modelsCount').textContent = 'Errore caricamento';
+  }
+}
+async function resetPrompt(key) {
+  if (!confirm('Resettare questo prompt al valore predefinito? I servizi AI useranno il prompt hardcoded.')) return;
+  const input = document.getElementById('input_' + key);
+  if (input) input.value = '';
+  try {
+    const res = await fetch('/api/admin/settings/' + encodeURIComponent(key), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: '' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Prompt resettato al default');
+      if (input) input.placeholder = 'Non impostato';
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (_) { showToast('Errore di connessione', 'error'); }
+}
+async function loadPromptDefaults() {
+  try {
+    const res = await fetch('/api/admin/ai-prompts/defaults');
+    if (!res.ok) return;
+    promptDefaults = await res.json();
+    render(currentSettings);
+  } catch (_) {}
+}
+// Event delegation for CSP compliance (Helmet v7 blocks inline handlers)
+document.getElementById('addBlacklistBtn').addEventListener('click', addBlacklistPattern);
+document.getElementById('clearCacheBtn').addEventListener('click', clearCache);
+
+document.getElementById('settingsContainer').addEventListener('click', function(e) {
+  let btn = e.target.closest('.js-save-setting');
+  if (btn && btn.dataset.key) saveSetting(btn.dataset.key, btn);
+});
+document.getElementById('settingsContainer').addEventListener('click', function(e) {
+  let btn = e.target.closest('.js-reset-prompt');
+  if (btn && btn.dataset.key) resetPrompt(btn.dataset.key);
+});
+document.getElementById('settingsContainer').addEventListener('click', function(e) {
+  if (e.target.closest('.js-load-models')) loadModels();
+});
+document.getElementById('settingsContainer').addEventListener('click', function(e) {
+  let btn = e.target.closest('.js-test-smtp');
+  if (btn) testSmtp({ target: btn });
+});
+
+document.getElementById('blacklistTable').addEventListener('change', function(e) {
+  let cb = e.target.closest('.js-toggle-blacklist');
+  if (cb) toggleBlacklist(parseInt(cb.dataset.id), cb.checked);
+});
+document.getElementById('blacklistTable').addEventListener('click', function(e) {
+  let btn = e.target.closest('.js-delete-blacklist');
+  if (btn) deleteBlacklist(parseInt(btn.dataset.id));
+});
+</script>

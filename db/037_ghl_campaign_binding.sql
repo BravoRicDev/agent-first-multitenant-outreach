@@ -1,0 +1,13 @@
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_account_id INT REFERENCES ghl_settings(id);
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_pipeline_id TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_pipeline_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_new_lead TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_new_lead_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_email_sent TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_email_sent_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_opened TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_opened_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_replied TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_stage_replied_name TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ghl_our_tag TEXT;
+UPDATE ghl_settings SET api_url = 'https://services.leadconnectorhq.com' WHERE api_url LIKE '%rest.gohighlevel%';

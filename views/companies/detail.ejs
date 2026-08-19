@@ -1,0 +1,655 @@
+<div class="page-header">
+  <h1><%= company.title || company.nome_studio || 'Azienda #' + company.id %></h1>
+  <div class="actions">
+    <a href="/companies<%= typeof returnQuery !== 'undefined' && returnQuery ? returnQuery : '' %>" class="btn btn-secondary">← Torna alla lista</a>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Dati anagrafici</h3>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+    <div><strong>Nome studio:</strong> <%= company.nome_studio || company.title || '—' %></div>
+    <div><strong>Azienda:</strong> <%= company.nome_azienda || '—' %></div>
+    <div><strong>Indirizzo:</strong> <%= company.address || '—' %></div>
+    <div><strong>Via:</strong> <%= company.via || '—' %></div>
+    <div><strong>CAP:</strong> <%= company.cap || '—' %></div>
+    <div><strong>Comune:</strong> <%= company.comune || '—' %></div>
+    <div><strong>Provincia:</strong> <%= company.provincia || '—' %></div>
+    <div><strong>Telefono:</strong> <%= company.phone_number || '—' %></div>
+    <div><strong>Email:</strong> <input type="email" id="emailField" value="<%= company.email || '' %>" pattern="[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$" title="Inserisci un indirizzo email valido" style="width:220px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" data-id="<%= company.id %>"></div>
+    <div><strong>Website:</strong> <% if (company.website && /^https?:\/\//i.test(company.website)) { %><a href="<%= company.website %>" target="_blank" rel="noopener"><%= company.website %></a><% } else { %><%= company.website || '—' %><% } %></div>
+    <div><strong>Rating:</strong> <%= company.rating ? `${company.rating} (${company.rating_count} recensioni)` : '—' %></div>
+    <div><strong>Categoria:</strong> <%= company.category || '—' %></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Stato</h3>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+      <input type="checkbox" id="approvato" <%= company.approvato ? 'checked' : '' %> data-id="<%= company.id %>">
+      Approvato
+    </label>
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+      <input type="checkbox" id="inviato" <%= company.inviato ? 'checked' : '' %> <%= company.inviato ? 'disabled title="Bloccato: già inviato"' : '' %> data-id="<%= company.id %>">
+      Inviato <%= company.inviato ? '(bloccato)' : '' %>
+    </label>
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+      <input type="checkbox" id="bozza_rifai" <%= company.bozza_rifai ? 'checked' : '' %> data-id="<%= company.id %>">
+      Rifai bozza
+    </label>
+  </div>
+  <div>
+    <strong>Bozza creata:</strong>
+    <% if (company.bozza_creata) { %>
+    <span class="badge badge-success">Sì</span>
+    <% } else { %>
+    <span class="badge badge-warning">No</span>
+    <% } %>
+  </div>
+  <% if (company.bozza_failed_count > 2) { %>
+  <div style="margin-top:8px;padding:8px 12px;background:#fee2e2;border-radius:8px;font-size:13px;color:#991b1b;">
+    ⚠ Generazione bozza fallita <%= company.bozza_failed_count %> volte. Verifica che il sito sia raggiungibile.
+  </div>
+  <% } %>
+  <% if (company.inviato) { %>
+  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+    <div><strong>Inviato il:</strong> <%= company.inviato_at ? new Date(company.inviato_at).toLocaleString('it-IT') : '—' %></div>
+    <% if (company.email_opened_at) { %><div><strong>Aperto il:</strong> <%= new Date(company.email_opened_at).toLocaleString('it-IT') %></div><% } %>
+    <% if (company.email_clicked_at) { %><div><strong>Cliccato il:</strong> <%= new Date(company.email_clicked_at).toLocaleString('it-IT') %></div><% } %>
+    <% if (company.email_bounced) { %><span class="badge badge-danger">Bounced</span><% } %>
+  </div>
+  <% } %>
+  <% if (typeof sentVia !== 'undefined' && sentVia) { %>
+  <div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">
+    📧 Inviata via <strong><%= sentVia.smtp_account_name %></strong> (<%= sentVia.smtp_from_email %>)
+  </div>
+  <% } %>
+  <% if (company.consent_status || company.cms_synced_at || company.has_replied) { %>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;">
+    <% if (company.consent_status) { %><span class="badge <%= company.consent_status === 'marketing' ? 'badge-success' : 'badge-warning' %>">Consenso: <%= company.consent_status %></span><% } %>
+    <% if (company.cms_synced_at) { %><span class="badge badge-info" title="Sincronizzato con il CMS agent-first">CMS: <%= new Date(company.cms_synced_at).toLocaleDateString('it-IT') %></span><% } %>
+    <% if (company.lead_score) { %><span class="badge badge-info">Score: <%= company.lead_score %></span><% } %>
+    <% if (company.has_replied) { %><span class="badge badge-success">Risposta <%= company.replied_at ? 'il '+new Date(company.replied_at).toLocaleString('it-IT') : 'ricevuta' %></span><% } %>
+  </div>
+  <% } %>
+</div>
+
+<% if (company.funnel_stage || company.call_status || company.booking_status) { %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Funnel B2B</h3>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+    <span class="badge badge-info">Stage: <%= company.funnel_stage || 'prospect' %></span>
+    <% if (company.call_status) { %><span class="badge badge-warning">Chiamata: <%= company.call_status %></span><% } %>
+    <% if (company.booking_status) { %><span class="badge badge-warning">Booking: <%= company.booking_status %></span><% } %>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; font-size: 13px; color: var(--text-secondary);">
+    <% if (company.call_outcome_at) { %><div><strong>Esito chiamata il:</strong> <%= new Date(company.call_outcome_at).toLocaleString('it-IT') %></div><% } %>
+    <% if (company.next_call_at) { %><div><strong>Richiamare il:</strong> <%= new Date(company.next_call_at).toLocaleString('it-IT') %></div><% } %>
+    <% if (company.call_notes) { %><div style="grid-column: 1 / -1;"><strong>Note chiamata:</strong> <%= company.call_notes %></div><% } %>
+    <% if (company.booking_at) { %><div><strong>Videocall il:</strong> <%= new Date(company.booking_at).toLocaleString('it-IT') %></div><% } %>
+    <% if (company.booking_link) { %><div><strong>Link booking:</strong> <a href="<%= company.booking_link %>" target="_blank" rel="noopener"><%= company.booking_link %></a></div><% } %>
+    <% if (company.booking_notes) { %><div style="grid-column: 1 / -1;"><strong>Note booking:</strong> <%= company.booking_notes %></div><% } %>
+  </div>
+  <p style="font-size: 12px; color: var(--text-secondary); margin-top: 12px;">Gestito via agente/MCP (<code>call-outcome</code>, <code>funnel-stage</code>, <code>booking</code>) — vedi AGENT.md.</p>
+</div>
+<% } %>
+
+<% if (typeof campaigns !== 'undefined') { %>
+<div class="card">
+  <h3 style="margin-bottom:12px;">Campagna</h3>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <select id="campaignAssign" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;">
+      <option value="">— Nessuna —</option>
+      <% campaigns.forEach(c => { %>
+      <option value="<%= c.id %>" <%= String(company.campaign_id) === String(c.id) ? 'selected' : '' %>><%= c.name %></option>
+      <% }) %>
+    </select>
+    <button class="btn btn-sm btn-primary" id="assignCampaignBtn">Assegna</button>
+  </div>
+  <% if (company.inviato) { %>
+  <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">Email già inviata il <%= new Date(company.inviato_at).toLocaleDateString('it-IT') %>.</p>
+  <% } %>
+</div>
+<script>
+async function assignCampaign() {
+  var campaignId = document.getElementById('campaignAssign').value || null;
+  var res = await fetch('/api/companies/<%= company.id %>/campaign', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ campaign_id: campaignId ? parseInt(campaignId) : null })
+  });
+  var data = await res.json();
+  if (data.success) showToast('Campagna assegnata');
+  else showToast('Errore', 'error');
+}
+document.getElementById('assignCampaignBtn').addEventListener('click', assignCampaign);
+</script>
+<% } %>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Descrizione</h3>
+  <div style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; color: var(--text-secondary); line-height: 1.6; padding: 8px; border: 1px solid var(--border); border-radius: 4px;"><%= company.descrizione || 'Nessuna descrizione disponibile.' %></div>
+</div>
+
+<div class="card" id="bozza-card">
+  <h3 style="margin-bottom: 16px;">Bozza Email</h3>
+  <div style="margin-bottom: 12px;">
+    <label style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">Oggetto</label>
+    <input type="text" id="bozza_email_oggetto" value="<%= company.bozza_email_oggetto || '' %>" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;" data-id="<%= company.id %>">
+  </div>
+  <div style="margin-bottom: 8px;">
+    <label style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">Corpo email</label>
+    <textarea id="bozza_email" rows="12" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: monospace; resize: vertical;" data-id="<%= company.id %>"><%= company.bozza_email || '' %></textarea>
+    <span id="saveIndicator" style="font-size: 12px; color: var(--text-secondary);"></span>
+  </div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <button class="btn btn-sm btn-primary js-preview-email">Anteprima email</button>
+    <button class="btn btn-sm btn-secondary js-final-preview">👁 Anteprima finale realistica</button>
+    <button class="btn btn-sm btn-secondary js-ai-rewrite" data-id="<%= company.id %>">Riscrivi con AI</button>
+  </div>
+  <div id="rewritePrompt" style="display:none; margin-top: 8px;">
+    <div class="form-group">
+      <label>Istruzioni per la riscrittura</label>
+      <input type="text" id="rewriteInstructions" placeholder="Es. Rendi più informale, accorcia, enfatizza il CTA..." style="width: 100%;">
+      <input type="hidden" id="rewriteInstructionsTemp">
+    </div>
+    <button class="btn btn-sm btn-primary js-confirm-rewrite" data-id="<%= company.id %>">Conferma riscrittura</button>
+    <button class="btn btn-sm btn-secondary js-cancel-rewrite-prompt">Annulla</button>
+  </div>
+</div>
+
+<div id="finalPreviewContainer" style="display:none;margin-top:16px;padding:16px;background:var(--bg-body);border-radius:8px;border:1px solid var(--border);">
+  <div style="margin-bottom:8px;font-size:13px;">
+    <strong>Anteprima finale</strong> — mostra l'email come la riceverà il destinatario
+  </div>
+  <div id="finalPreviewMeta" style="font-size:13px;margin-bottom:8px;"></div>
+  <iframe id="finalPreviewFrame" style="width:100%;height:400px;border:1px solid var(--border);border-radius:4px;"></iframe>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Azioni</h3>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <% if (company.website) { %>
+    <button class="btn btn-primary js-extract-data" data-id="<%= company.id %>" data-website="<%= company.website %>"><%= (company.nome_studio || company.descrizione || company.email) ? 'Aggiorna dati' : 'Estrai dati dal sito' %></button>
+    <% } %>
+    <% if (company.email) { %>
+    <button class="btn btn-primary js-generate-email" data-id="<%= company.id %>">Genera bozza email</button>
+    <% } %>
+    <% if (company.bozza_creata && company.approvato && !company.inviato) { %>
+    <button class="btn btn-primary js-send-email" data-id="<%= company.id %>">Invia Email</button>
+    <% } %>
+    <button class="btn btn-secondary js-cms-sync" data-id="<%= company.id %>" title="Sincronizza con il CMS agent-first (contatto + consenso)">🔄 Sync CMS</button>
+    <a href="/admin/audit?resource=companies&resource_id=<%= company.id %>" class="btn btn-secondary">Audit log</a>
+    <button class="btn <%= company.inviato ? 'btn-danger' : 'btn-danger' %> js-delete-company" data-id="<%= company.id %>" data-sent="<%= company.inviato ? 'true' : 'false' %>">Elimina</button>
+  </div>
+</div>
+
+<% if (typeof audits !== 'undefined' && audits && audits.length > 0) { %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Ultimi log audit</h3>
+  <table>
+    <thead><tr><th>Data</th><th>Utente</th><th>Azione</th><th>Dettagli</th></tr></thead>
+    <tbody>
+      <% audits.forEach(log => { %>
+      <tr>
+        <td><%= new Date(log.created_at).toLocaleString('it-IT') %></td>
+        <td><%= log.user_name || '—' %></td>
+        <td><span class="badge badge-info"><%= log.action %></span></td>
+        <td><%= log.details ? JSON.stringify(log.details).substring(0, 80) : '—' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<% if (typeof sequences !== 'undefined' && sequences && sequences.length > 0) { %>
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Follow-up</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Schedulato</th><th>Inviato</th><th>Cancellato</th><th>Motivo</th></tr></thead>
+    <tbody>
+      <% sequences.forEach(s => { %>
+      <tr>
+        <td>#<%= s.step %></td>
+        <td><%= s.scheduled_at ? new Date(s.scheduled_at).toLocaleString('it-IT') : '—' %></td>
+        <td><%= s.sent_at ? new Date(s.sent_at).toLocaleString('it-IT') : '<span class="badge badge-warning">In attesa</span>' %></td>
+        <td><%= s.cancelled_at ? new Date(s.cancelled_at).toLocaleString('it-IT') : '—' %></td>
+        <td><%= s.cancel_reason || '—' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<div id="previewModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:12px;max-width:700px;width:90%;max-height:90vh;overflow-y:auto;padding:24px;">
+    <h3 style="margin-bottom: 16px;">Anteprima email</h3>
+    <div style="margin-bottom: 12px; padding: 8px; background: var(--bg-body); border-radius: 4px;">
+      <strong>Da:</strong> outreach@<span id="previewFrom">studio</span><br>
+      <strong>Oggetto:</strong> <span id="previewSubject"></span>
+    </div>
+    <div style="border: 1px solid var(--border); border-radius: 8px; padding: 20px; background: white; font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; white-space: pre-wrap;" id="previewBody"></div>
+    <button class="btn btn-sm btn-secondary js-close-preview" style="margin-top: 16px;">Chiudi</button>
+  </div>
+</div>
+
+<div id="rewriteCompareModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;" data-id="<%= company.id %>">
+  <div style="background:white;border-radius:12px;max-width:900px;width:95%;max-height:90vh;overflow-y:auto;padding:24px;">
+    <h3 style="margin-bottom:8px;">Confronto riscrittura</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Versione originale a sinistra, nuova versione a destra.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">ORIGINALE</h4>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <strong style="font-size:13px;">Oggetto:</strong>
+          <div id="compareOldSubject" style="font-size:13px;margin-bottom:8px;white-space:pre-wrap;"></div>
+          <strong style="font-size:13px;">Corpo:</strong>
+          <div id="compareOldBody" style="font-size:13px;white-space:pre-wrap;max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:13px;color:var(--success);margin-bottom:4px;">NUOVA</h4>
+        <div style="border:2px solid var(--success);border-radius:8px;padding:12px;">
+          <strong style="font-size:13px;">Oggetto:</strong>
+          <div id="compareNewSubject" style="font-size:13px;margin-bottom:8px;white-space:pre-wrap;"></div>
+          <strong style="font-size:13px;">Corpo:</strong>
+          <div id="compareNewBody" style="font-size:13px;white-space:pre-wrap;max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Istruzioni per rigenerazione</label>
+      <input type="text" id="rewriteInstructionsModal" placeholder="Es. Rendi pi&ugrave; informale, accorcia..." style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="btn btn-primary js-approve-rewrite" data-id="<%= company.id %>">Approva versione</button>
+      <button class="btn btn-secondary" id="regenerateBtn" data-id="<%= company.id %>">Rigenera</button>
+      <button class="btn btn-secondary js-cancel-rewrite" data-id="<%= company.id %>" style="margin-left:auto;">Annulla modifiche</button>
+    </div>
+  </div>
+</div>
+
+<% if (typeof versions !== 'undefined' && versions && versions.length > 0) { %>
+<div class="card" id="versions-card">
+  <h3 style="margin-bottom:16px;">Versioni bozze</h3>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Data</th><th>Oggetto</th><th>Sorgente</th><th></th></tr></thead>
+    <tbody>
+      <% versions.forEach(v => { %>
+      <tr>
+        <td><%= new Date(v.created_at).toLocaleString('it-IT') %></td>
+        <td><%= v.oggetto ? v.oggetto.substring(0,60)+(v.oggetto.length>60?'…':'') : '—' %></td>
+        <td><%= v.source %></td>
+        <td><button class="btn btn-sm btn-secondary js-restore-version" data-company-id="<%= company.id %>" data-version-id="<%= v.id %>">Ripristina</button></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+<% } %>
+
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+async function toggleField(event, id, field, value) {
+  const cb = event.target || { checked: value };
+  const previousValue = !cb.checked;
+  try {
+    const res = await fetch(`/api/companies/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value })
+    });
+    const data = await res.json();
+    if (data.success) showToast('Aggiornato');
+    else { cb.checked = previousValue; showToast('Errore', 'error'); }
+  } catch (err) {
+    cb.checked = previousValue;
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+const ERROR_MAP = {
+  'Failed to fetch': 'Errore di connessione al server',
+  'NetworkError': 'Errore di rete',
+  'The operation was aborted': 'Richiesta timeout',
+  'timeout': 'Richiesta timeout',
+  'Load failed': 'Errore di caricamento',
+};
+
+function translateError(err) {
+  return ERROR_MAP[err.message] || err.message;
+}
+
+let lastRewriteOld = null;
+let lastRewriteNew = null;
+let draftTimer;
+async function saveDraft(id) {
+  clearTimeout(draftTimer);
+  const indicator = document.getElementById('saveIndicator');
+  if (indicator) indicator.textContent = 'Salvataggio...';
+  draftTimer = setTimeout(async () => {
+    const oggetto = document.getElementById('bozza_email_oggetto').value;
+    const corpo = document.getElementById('bozza_email').value;
+    try {
+      const res = await fetch(`/api/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bozza_email_oggetto: oggetto, bozza_email: corpo })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (indicator) { indicator.textContent = 'Errore: ' + (data.error || 'non salvato'); setTimeout(() => { indicator.textContent = ''; }, 3000); }
+        return;
+      }
+      if (indicator) { indicator.textContent = 'Salvato ✓'; setTimeout(() => { indicator.textContent = ''; }, 2000); }
+    } catch (_) {
+      if (indicator) { indicator.textContent = 'Errore salvataggio'; setTimeout(() => { indicator.textContent = ''; }, 3000); }
+    }
+  }, 800);
+}
+
+function previewEmail() {
+  const subject = document.getElementById('bozza_email_oggetto').value || '—';
+  const body = document.getElementById('bozza_email').value || 'Nessun contenuto.';
+  document.getElementById('previewSubject').textContent = subject;
+  document.getElementById('previewBody').textContent = body;
+  document.getElementById('previewModal').style.display = 'flex';
+}
+
+function closePreview() {
+  document.getElementById('previewModal').style.display = 'none';
+}
+
+function aiRewrite(id) {
+  document.getElementById('rewritePrompt').style.display = 'block';
+}
+
+async function confirmRewrite(id, event) {
+  const instructions = document.getElementById('rewriteInstructions').value;
+  if (!instructions.trim()) { showToast('Inserisci le istruzioni', 'error'); return; }
+
+  lastRewriteOld = {
+    oggetto: document.getElementById('bozza_email_oggetto').value,
+    contenuto: document.getElementById('bozza_email').value,
+  };
+  document.getElementById('rewriteInstructionsTemp').value = instructions;
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Riscrittura...';
+
+  try {
+    const res = await fetch('/api/scraper/rewrite-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId: id, instructions })
+    });
+    const data = await res.json();
+    if (data.success) {
+      lastRewriteNew = { oggetto: data.oggetto, contenuto: data.contenuto };
+      document.getElementById('bozza_email_oggetto').value = data.oggetto;
+      document.getElementById('bozza_email').value = data.contenuto;
+      document.getElementById('rewritePrompt').style.display = 'none';
+      document.getElementById('rewriteInstructions').value = '';
+      showRewriteCompare(id);
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore: ' + translateError(err), 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Conferma riscrittura';
+}
+
+function showRewriteCompare(id) {
+  var modal = document.getElementById('rewriteCompareModal');
+  document.getElementById('compareOldSubject').textContent = lastRewriteOld?.oggetto || '—';
+  document.getElementById('compareOldBody').textContent = lastRewriteOld?.contenuto || '—';
+  document.getElementById('compareNewSubject').textContent = lastRewriteNew?.oggetto || '—';
+  document.getElementById('compareNewBody').textContent = lastRewriteNew?.contenuto || '—';
+  document.getElementById('rewriteInstructionsModal').value = document.getElementById('rewriteInstructionsTemp').value || '';
+  modal.style.display = 'flex';
+}
+
+function approveRewrite(id) {
+  document.getElementById('rewriteCompareModal').style.display = 'none';
+  showToast('Nuova versione approvata');
+}
+
+async function regenerateRewrite(id) {
+  var instructions = document.getElementById('rewriteInstructionsModal').value;
+  if (!instructions.trim()) { showToast('Inserisci le istruzioni', 'error'); return; }
+
+  lastRewriteOld = { oggetto: lastRewriteNew.oggetto, contenuto: lastRewriteNew.contenuto };
+
+  var btn = document.getElementById('regenerateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Rigenerazione...';
+
+  try {
+    var res = await fetch('/api/scraper/rewrite-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId: id, instructions })
+    });
+    var data = await res.json();
+    if (data.success) {
+      lastRewriteNew = { oggetto: data.oggetto, contenuto: data.contenuto };
+      document.getElementById('bozza_email_oggetto').value = data.oggetto;
+      document.getElementById('bozza_email').value = data.contenuto;
+      document.getElementById('compareNewSubject').textContent = lastRewriteNew.oggetto;
+      document.getElementById('compareNewBody').textContent = lastRewriteNew.contenuto;
+      showToast('Nuova versione generata');
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore: ' + translateError(err), 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Rigenera';
+}
+
+function cancelRewrite(id) {
+  if (lastRewriteOld) {
+    document.getElementById('bozza_email_oggetto').value = lastRewriteOld.oggetto;
+    document.getElementById('bozza_email').value = lastRewriteOld.contenuto;
+    saveDraft(id);
+  }
+  document.getElementById('rewriteCompareModal').style.display = 'none';
+  showToast('Modifiche annullate');
+}
+
+async function extractData(event, id, website) {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Estrazione in corso...';
+  let timeoutId = setTimeout(function() { btn.textContent = '⏳ Ancora in corso... (lungo)'; }, 20000);
+  try {
+    const res = await fetch('/api/scraper/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ website, companyId: id })
+    });
+    const data = await res.json();
+    if (data.nome_studio_aziendale || data.email_azienda) {
+      showToast('Dati estratti con successo');
+      setTimeout(() => { location.hash = '#bozza-card'; location.reload(); }, 1500);
+      clearTimeout(timeoutId);
+      return;
+    } else {
+      showToast('Estrazione fallita', 'error');
+    }
+  } catch (err) {
+    showToast('Errore: ' + translateError(err), 'error');
+  }
+  clearTimeout(timeoutId);
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
+async function generateEmail(event, id) {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Generazione in corso...';
+  let timeoutId = setTimeout(function() { btn.textContent = '⏳ Ancora in corso... (lungo)'; }, 20000);
+  try {
+    const res = await fetch('/api/scraper/generate-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId: id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Email generata con successo');
+      setTimeout(() => { location.hash = '#bozza-card'; location.reload(); }, 1500);
+      clearTimeout(timeoutId);
+      return;
+    } else {
+      const errorMsg = data.error === 'Configurazione direzione assente. Compila Info Azienda in Direzione Copy prima di generare email.'
+        ? '⚠️ Configura prima Info Azienda in Direzione Copy'
+        : (data.error || 'Errore sconosciuto');
+      showToast(errorMsg, 'error');
+    }
+  } catch (err) {
+    showToast('Errore: ' + translateError(err), 'error');
+  }
+  clearTimeout(timeoutId);
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
+async function sendEmail(event, id) {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Invio in corso...';
+  let timeoutId = setTimeout(function() { btn.textContent = '⏳ Ancora in corso...'; }, 20000);
+  try {
+    const res = await fetch(`/api/companies/${id}/send`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Email accodata per l\'invio');
+      setTimeout(() => { location.hash = '#bozza-card'; location.reload(); }, 1500);
+      clearTimeout(timeoutId);
+      return;
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore: ' + translateError(err), 'error');
+  }
+  clearTimeout(timeoutId);
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
+async function deleteCompany(id, isSent) {
+  const baseMsg = isSent
+    ? 'ATTENZIONE: Questo azienda ha già ricevuto email. Verranno persi:\n- Storico invii e aperture\n- Sequenze follow-up\n- Versioni bozze'
+    : 'Eliminare questo azienda? Verranno perse bozze e dati estratti.';
+  if (!confirm(baseMsg)) return;
+  try {
+    const res = await fetch(`/api/companies/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Azienda eliminato');
+      setTimeout(() => window.location.href = '/companies', 1000);
+    } else {
+      showToast('Errore', 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+async function saveEmail(id) {
+  const email = document.getElementById('emailField').value;
+  try {
+    const res = await fetch(`/api/companies/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (data.success) showToast('Email aggiornata');
+    else showToast('Errore', 'error');
+  } catch { showToast('Errore di connessione', 'error'); }
+}
+
+async function restoreVersion(companyId, versionId) {
+  if (!confirm('Ripristinare questa versione? La bozza attuale verrà salvata automaticamente.')) return;
+  try {
+    const res = await fetch(`/api/companies/${companyId}/restore-version/${versionId}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('bozza_email_oggetto').value = data.oggetto;
+      document.getElementById('bozza_email').value = data.contenuto;
+      showToast('Versione ripristinata');
+      setTimeout(() => location.reload(), 1000);
+    } else showToast('Errore', 'error');
+  } catch { showToast('Errore di connessione', 'error'); }
+}
+
+async function loadFinalPreview() {
+  var container = document.getElementById('finalPreviewContainer');
+  container.style.display = 'block';
+  container.innerHTML = '<p style="color:var(--text-secondary);">⏳ Caricamento anteprima...</p>';
+  try {
+    var res = await fetch('/api/companies/<%= company.id %>/final-preview');
+    var data = await res.json();
+    container.innerHTML = '<div style="margin-bottom:8px;font-size:13px;">' +
+      '<strong>Da:</strong> ' + escapeHtml(data.from) + ' &nbsp;&nbsp;' +
+      '<strong>Oggetto:</strong> ' + escapeHtml(data.subject) + '</div>' +
+      '<iframe style="width:100%;height:500px;border:1px solid var(--border);border-radius:4px;background:white;" srcdoc="' + escapeHtml(data.html || '<pre>' + escapeHtml(data.text || '') + '</pre>') + '"></iframe>';
+  } catch(e) { container.innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>'; }
+}
+async function cmsSync(id) {
+  if (!confirm("Sincronizzare questa azienda con il CMS agent-first?")) return;
+  try {
+    var res = await fetch("/api/companies/" + id + "/cms-sync", { method: "POST" });
+    var data = await res.json();
+    if (data.success) { showToast("✅ Sincronizzato con CMS (consenso: " + (data.consent_status || "cold") + ")"); setTimeout(function(){ location.reload(); }, 1500); }
+    else { showToast("❌ " + (data.error || "Errore"), "error"); }
+  } catch(e) { showToast("❌ Errore di connessione", "error"); }
+}
+
+document.getElementById('emailField').addEventListener('change', function() { saveEmail(this.dataset.id); });
+document.getElementById('approvato').addEventListener('change', function(e) { toggleField(e, this.dataset.id, 'approvato', this.checked); });
+document.getElementById('inviato').addEventListener('change', function(e) { toggleField(e, this.dataset.id, 'inviato', this.checked); });
+document.getElementById('bozza_rifai').addEventListener('change', function(e) { toggleField(e, this.dataset.id, 'bozza_rifai', this.checked); });
+document.getElementById('bozza_email_oggetto').addEventListener('input', function() { saveDraft(this.dataset.id); });
+document.getElementById('bozza_email').addEventListener('input', function() { saveDraft(this.dataset.id); });
+document.querySelector('.js-preview-email')?.addEventListener('click', previewEmail);
+document.querySelector('.js-final-preview')?.addEventListener('click', loadFinalPreview);
+document.querySelector('.js-ai-rewrite')?.addEventListener('click', function() { aiRewrite(this.dataset.id); });
+document.querySelector('.js-confirm-rewrite')?.addEventListener('click', function(e) { confirmRewrite(this.dataset.id, e); });
+document.querySelector('.js-cancel-rewrite-prompt')?.addEventListener('click', function() { document.getElementById('rewritePrompt').style.display = 'none'; });
+document.querySelector('.js-extract-data')?.addEventListener('click', function(e) { extractData(e, this.dataset.id, this.dataset.website); });
+document.querySelector('.js-generate-email')?.addEventListener('click', function(e) { generateEmail(e, this.dataset.id); });
+document.querySelector('.js-send-email')?.addEventListener('click', function(e) { sendEmail(e, this.dataset.id); });
+document.querySelector('.js-cms-sync')?.addEventListener('click', function() { cmsSync(this.dataset.id); });
+document.querySelector('.js-delete-company')?.addEventListener('click', function() { deleteCompany(this.dataset.id, this.dataset.sent === 'true'); });
+document.getElementById('previewModal').addEventListener('click', function(e) { if(e.target === this) closePreview(); });
+document.querySelector('.js-close-preview')?.addEventListener('click', closePreview);
+document.getElementById('rewriteCompareModal').addEventListener('click', function(e) { if(e.target === this) cancelRewrite(this.dataset.id); });
+document.querySelector('.js-approve-rewrite')?.addEventListener('click', function() { approveRewrite(this.dataset.id); });
+document.getElementById('regenerateBtn').addEventListener('click', function() { regenerateRewrite(this.dataset.id); });
+document.querySelector('.js-cancel-rewrite')?.addEventListener('click', function() { cancelRewrite(this.dataset.id); });
+document.getElementById('versions-card')?.addEventListener('click', function(e) {
+  var btn = e.target.closest('.js-restore-version');
+  if (btn) restoreVersion(btn.dataset.companyId, btn.dataset.versionId);
+});
+</script>

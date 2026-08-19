@@ -1,0 +1,602 @@
+<div class="page-header">
+  <h1>Aziende</h1>
+  <div style="font-size: 14px; color: var(--text-secondary);">
+    <%= pagination.total %> risultati
+  </div>
+</div>
+
+<style>
+.chip { display:inline-flex; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:500; background:var(--bg-body); border:1px solid var(--border); color:var(--text-secondary); cursor:pointer; text-decoration:none; transition:all 0.2s; }
+.chip:hover { border-color:var(--brand-primary); color:var(--brand-primary); }
+.chip-active { background:var(--brand-gradient); color:white; border-color:transparent; }
+</style>
+<div class="chips" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+  <a href="/companies" class="chip <%= !filters.bozza && !filters.approvato && !filters.inviato && !filters.bounced ? 'chip-active' : '' %>">Tutti (<%= pagination.total %>)</a>
+  <a href="/companies?bozza=false" class="chip <%= filters.bozza === 'false' ? 'chip-active' : '' %>">Senza bozza (<%= noDraftCount %>)</a>
+  <a href="/companies?approvato=false&inviato=false&bozza=true" class="chip <%= filters.approvato === 'false' && filters.inviato === 'false' ? 'chip-active' : '' %>">Da approvare (<%= pendingApprovCount %>)</a>
+  <a href="/companies?approvato=true&inviato=false&bozza=true" class="chip <%= filters.approvato === 'true' && filters.inviato === 'false' && filters.bozza === 'true' ? 'chip-active' : '' %>">Approvate (<%= approvedCount %>)</a>
+  <a href="/companies?inviato=true" class="chip <%= filters.inviato === 'true' ? 'chip-active' : '' %>">Inviate (<%= sentCount %>)</a>
+  <a href="/companies?bounced=true" class="chip <%= filters.bounced === 'true' ? 'chip-active' : '' %>">Bounced (<%= bouncedCount %>)</a>
+</div>
+
+<div class="card">
+  <form class="filters" method="get">
+    <div class="filter-group">
+      <label>Comune</label>
+      <input type="text" name="comune" placeholder="Filtra comune..." value="<%= filters.comune || '' %>">
+    </div>
+    <div class="filter-group">
+      <label>Provincia</label>
+      <select name="provincia">
+        <option value="">Tutte</option>
+        <% if (typeof province !== 'undefined' && province) { province.forEach(p => { %>
+        <option value="<%= p.provincia %>" <%= filters.provincia === p.provincia ? 'selected' : '' %>><%= p.provincia %></option>
+        <% }); } %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Regione</label>
+      <select name="regione">
+        <option value="">Tutte</option>
+        <% if (typeof regioni !== 'undefined') { regioni.forEach(r => { %>
+        <option value="<%= r.denominazione_regione %>" <%= filters.regione === r.denominazione_regione ? 'selected' : '' %>><%= r.denominazione_regione %></option>
+        <% }); } %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Approvato</label>
+      <select name="approvato">
+        <option value="">Tutti</option>
+        <option value="true" <%= filters.approvato === 'true' ? 'selected' : '' %>>Approvato</option>
+        <option value="false" <%= filters.approvato === 'false' ? 'selected' : '' %>>Da approvare</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Inviato</label>
+      <select name="inviato">
+        <option value="">Tutti</option>
+        <option value="true" <%= filters.inviato === 'true' ? 'selected' : '' %>>Inviato</option>
+        <option value="false" <%= filters.inviato === 'false' ? 'selected' : '' %>>Non inviato</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Bozza</label>
+      <select name="bozza">
+        <option value="">Tutti</option>
+        <option value="true" <%= filters.bozza === 'true' ? 'selected' : '' %>>Con bozza</option>
+        <option value="false" <%= filters.bozza === 'false' ? 'selected' : '' %>>Senza bozza</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Bounced</label>
+      <select name="bounced">
+        <option value="">Tutti</option>
+        <option value="true" <%= filters.bounced === 'true' ? 'selected' : '' %>>Bounced</option>
+        <option value="false" <%= filters.bounced === 'false' ? 'selected' : '' %>>Non bounced</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Campagna</label>
+      <select name="campaign_id">
+        <option value="">Tutte</option>
+        <% if (typeof campaigns !== 'undefined') { campaigns.forEach(c => { %>
+        <option value="<%= c.id %>" <%= filters.campaign_id === String(c.id) ? 'selected' : '' %>><%= c.name %></option>
+        <% }); } %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Ricerca</label>
+      <input type="text" name="search" placeholder="Nome, studio, email..." value="<%= filters.search || '' %>">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Filtra</button>
+    <a href="/companies" class="btn btn-secondary btn-sm" title="Rimuovi tutti i filtri">Reset filtri</a>
+    <a href="/api/companies/export?<%= currentQuery || '' %>" class="btn btn-secondary btn-sm" download>Esporta CSV</a>
+  </form>
+
+  <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+    <label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;">
+      <input type="checkbox" id="selectAll"> Seleziona tutti
+    </label>
+    <button class="btn btn-sm btn-primary" id="bulkApproveBtn" disabled>Approva selezionati</button>
+    <button class="btn btn-sm btn-secondary" id="bulkEditBtn" disabled>Modifica bozze</button>
+    <select id="bulkCampaignSelect" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+      <option value="">— Assegna a campagna —</option>
+      <% if (typeof campaigns !== 'undefined') { campaigns.forEach(c => { %>
+      <option value="<%= c.id %>"><%= c.name %></option>
+      <% }); } %>
+    </select>
+    <button class="btn btn-sm btn-secondary" id="bulkCampaignBtn" disabled>Assegna</button>
+    <button class="btn btn-sm btn-secondary" id="bulkExportBtn" disabled>Esporta selezionati</button>
+    <button class="btn btn-sm btn-secondary js-show-import-form">Importa CSV</button>
+    <button class="btn btn-sm btn-secondary" id="kanbanToggle">Vista Kanban</button>
+  </div>
+
+  <div id="importForm" style="display:none; margin-bottom: 16px; padding: 16px; background: var(--bg-body); border-radius: 8px;">
+    <h4 style="margin-bottom: 8px;">Importa aziende da CSV</h4>
+    <div class="form-group">
+      <label>Carica file CSV</label>
+      <input type="file" id="csvFile" accept=".csv,.tsv">
+    </div>
+    <div id="csvPreview" style="margin-bottom: 8px; display:none;">
+      <label>Mappatura colonne</label>
+      <p style="font-size:12px;color:var(--text-secondary);margin:4px 0;">Campi minimi consigliati: <code>email</code> o <code>website</code> per la deduplica.</p>
+      <div id="csvMapping" style="font-size:13px;"></div>
+    </div>
+    <div class="form-group">
+      <label>Assegna a campagna</label>
+      <select id="importCampaignId">
+        <option value="">— Nessuna —</option>
+        <% if (typeof campaigns !== 'undefined') { campaigns.forEach(c => { %>
+        <option value="<%= c.id %>"><%= c.name %></option>
+        <% }); } %>
+      </select>
+    </div>
+    <button class="btn btn-sm btn-primary" id="importBtn" disabled>Importa</button>
+    <button class="btn btn-sm btn-secondary js-close-import">Annulla</button>
+    <div id="importResult" style="margin-top: 8px; font-size: 13px;"></div>
+  </div>
+
+  <div id="tableView">
+  <% if (companies.length === 0) { %>
+  <div class="empty-state">
+    <h3>Nessun azienda trovato</h3>
+    <p>Prova a modificare i filtri.</p>
+  </div>
+  <% } else { %>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 40px;"></th>
+          <th>Studio</th>
+          <th>Comune</th>
+          <th>Prov.</th>
+          <th>Regione</th>
+          <th>Rating</th>
+          <th>Email</th>
+          <th>Oggetto</th>
+          <th>Bozza</th>
+          <th>Stato</th>
+          <th>Score</th>
+          <th>Risposta</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% companies.forEach(d => { %>
+        <tr>
+          <td><input type="checkbox" class="company-select" value="<%= d.id %>" <%= !d.bozza_creata || d.inviato ? 'disabled' : '' %> data-inviato="<%= d.inviato ? 'true' : 'false' %>"></td>
+          <td>
+            <a href="/companies/<%= d.id %><%= (() => { const qs = new URLSearchParams(Object.fromEntries(Object.entries({...filters, page: pagination.page}).filter(([_, v]) => v !== '' && v !== undefined && v !== null && v !== 'null'))).toString(); return qs ? '?' + qs : ''; })() %>" style="color:inherit;text-decoration:none;">
+              <strong><%= d.title || d.nome_studio || '—' %></strong>
+              <% if (d.nome_azienda) { %><br><small style="color: var(--text-secondary)"><%= d.nome_azienda %></small><% } %>
+            </a>
+          </td>
+          <td><%= d.comune || '—' %></td>
+          <td><%= d.provincia || '—' %></td>
+          <td><%= d.regione || '—' %></td>
+          <td><%= d.rating ? `${d.rating} (${d.rating_count})` : '—' %></td>
+          <td><%= d.email || '—' %></td>
+          <td><%= d.bozza_email_oggetto ? d.bozza_email_oggetto.substring(0, 50) + (d.bozza_email_oggetto.length > 50 ? '…' : '') : '—' %></td>
+          <td>
+            <% if (d.bozza_creata) { %>
+            <span class="badge badge-success">Sì</span>
+            <% if (d.bozza_email_oggetto) { %>
+            <button class="btn btn-sm btn-secondary js-preview-draft" style="margin-top:4px;font-size:11px;" data-id="<%= d.id %>">👁 Anteprima</button>
+            <% } %>
+            <% } else { %>
+            <span class="badge badge-warning">No</span>
+            <% } %>
+            <% if (d.bozza_failed_count > 2) { %>
+            <span class="badge badge-danger">⚠ Fallita x<%= d.bozza_failed_count %></span>
+            <% } %>
+          </td>
+          <td>
+            <% if (d.inviato) { %><span class="badge badge-info">Inviato <%= d.inviato_at ? new Date(d.inviato_at).toLocaleDateString('it-IT') : '' %></span>
+            <% if (d.campaign_name) { %><br><small style="color:var(--text-secondary);">📁 <%= d.campaign_name %></small><% } %>
+            <% } else if (d.approvato) { %><span class="badge badge-success">Approvato</span><% } else { %><span class="badge badge-warning">In attesa</span>
+            <% const canApprove = d.bozza_creata && !d.inviato && (user.role === 'superadmin' || user.role === 'admin'); %>
+            <% if (canApprove) { %>
+            <label class="toggle-approve" style="cursor:pointer;font-size:12px;">
+              <input type="checkbox" class="approve-checkbox js-toggle-approve" <%= d.approvato ? 'checked' : '' %> data-id="<%= d.id %>"> Approva
+            </label>
+            <% } %>
+            <% } %>
+          </td>
+          <td><%= d.lead_score || 0 %></td>
+          <td>
+            <% if (d.has_replied) { %><span class="badge badge-success">Risposto</span><% } else { %>—<% } %>
+          </td>
+          <td>
+            <a href="/companies/<%= d.id %><%= (() => { const qs = new URLSearchParams(Object.fromEntries(Object.entries({...filters, page: pagination.page}).filter(([_, v]) => v !== '' && v !== undefined && v !== null && v !== 'null'))).toString(); return qs ? '?' + qs : ''; })() %>" class="btn btn-sm btn-primary">Dettaglio</a>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="bulkPreview" style="display:none;margin-top:16px;padding:16px;background:var(--bg-body);border-radius:8px;max-height:400px;overflow-y:auto;"></div>
+
+<div id="bulkEditModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:12px;max-width:600px;width:90%;padding:24px;">
+    <h3 style="margin-bottom:12px;">Modifica bozze in blocco</h3>
+    <div class="form-group">
+      <label>Nuovo oggetto (lascia vuoto per non modificare)</label>
+      <input type="text" id="bulkNewSubject" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;">
+    </div>
+    <div class="form-group">
+      <label>Nuovo corpo (sostituisce completamente)</label>
+      <textarea id="bulkNewBody" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:monospace;"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary js-confirm-bulk-edit">Applica a selezionati</button>
+      <button class="btn btn-secondary js-close-bulk-edit">Annulla</button>
+    </div>
+    <div id="bulkEditResult" style="margin-top:8px;font-size:13px;"></div>
+  </div>
+</div>
+
+  <% if (pagination.pages > 1) { %>
+  <% const qs = (obj) => new URLSearchParams(Object.entries(obj).filter(([_, v]) => v !== '' && v !== undefined && v !== null && v !== 'null')).toString(); %>
+  <div class="pagination">
+    <span style="font-size:13px;color:var(--text-secondary);margin-right:12px;">Pagina <%= pagination.page %> di <%= pagination.pages %> (<%= pagination.total %> totali)</span>
+    <% if (pagination.page > 1) { %><a href="?<%= qs({...filters, page: 1}) %>">&laquo;</a><% } %>
+    <% const winStart = Math.max(1, pagination.page - 5); %>
+    <% const winEnd = Math.min(pagination.pages, pagination.page + 5); %>
+    <% if (winStart > 1) { %><a href="?<%= qs({...filters, page: 1}) %>">1</a> <% if (winStart > 2) { %><span>…</span><% } %><% } %>
+    <% for (let p = winStart; p <= winEnd; p++) { %>
+      <% if (p === pagination.page) { %>
+        <span class="active"><%= p %></span>
+      <% } else { %>
+        <a href="?<%= qs({...filters, page: p}) %>"><%= p %></a>
+      <% } %>
+    <% } %>
+    <% if (winEnd < pagination.pages) { %><% if (winEnd < pagination.pages - 1) { %><span>…</span><% } %><a href="?<%= qs({...filters, page: pagination.pages}) %>"><%= pagination.pages %></a><% } %>
+    <% if (pagination.page < pagination.pages) { %><a href="?<%= qs({...filters, page: pagination.pages}) %>">&raquo;</a><% } %>
+  </div>
+  <% } %>
+  <% } %>
+</div>
+</div>
+
+<div id="kanbanView" style="display:none;">
+  <div id="kanbanContainer" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;"></div>
+</div>
+
+<div id="draftPreviewModal" class="js-modal-backdrop" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:12px;max-width:700px;width:90%;max-height:90vh;overflow-y:auto;padding:24px;">
+    <h3 style="margin-bottom:12px;">Anteprima bozza</h3>
+    <div id="draftPreviewContent" style="font-size:14px;line-height:1.6;"></div>
+    <button class="btn btn-sm btn-secondary js-close-draft-preview" style="margin-top:12px;">Chiudi</button>
+  </div>
+</div>
+
+<script>
+function toggleAll() {
+  const checked = document.getElementById('selectAll').checked;
+  document.querySelectorAll('.company-select:not(:disabled)').forEach(cb => cb.checked = checked);
+  updateBulkBtn();
+  const count = document.querySelectorAll('.company-select:checked').length;
+  if (count > 0) showToast('Selezionati ' + count + ' aziende in questa pagina', 'success');
+}
+
+function updateBulkBtn() {
+  const count = document.querySelectorAll('.company-select:checked').length;
+  document.getElementById('bulkApproveBtn').disabled = count === 0;
+  document.getElementById('bulkApproveBtn').textContent = count > 0 ? `Approva (${count})` : 'Approva selezionati';
+  document.getElementById('bulkEditBtn').disabled = count === 0;
+  const camBtn = document.getElementById('bulkCampaignBtn');
+  if (camBtn) camBtn.disabled = count === 0;
+  const expBtn = document.getElementById('bulkExportBtn');
+  if (expBtn) expBtn.disabled = count === 0;
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+async function bulkApprove() {
+  const ids = Array.from(document.querySelectorAll('.company-select:checked')).map(cb => parseInt(cb.value));
+  if (ids.length === 0) return;
+
+  const previewDiv = document.getElementById('bulkPreview');
+  previewDiv.style.display = 'block';
+  previewDiv.innerHTML = '<p>Caricamento anteprime...</p>';
+
+  try {
+    const previewRes = await fetch(`/api/companies/bulk-preview?ids=${ids.join(',')}`);
+    const previews = await previewRes.json();
+    let html = '<h4 style="margin-bottom: 8px;">Anteprima bozze</h4>';
+    previews.forEach(p => {
+      html += `<div style="margin-bottom: 12px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border);">
+        <strong>${escapeHtml(p.title || p.nome_studio || 'ID ' + p.id)}</strong>${p.nome_azienda ? ' - ' + escapeHtml(p.nome_azienda) : ''}
+        <br><small style="color: var(--text-secondary);">Oggetto: ${escapeHtml(p.bozza_email_oggetto || '—')}</small>
+        ${p.bozza_email_preview ? `<br><small style="color: var(--text-secondary);">${escapeHtml(p.bozza_email_preview)}...</small>` : '<br><span class="badge badge-warning">Senza bozza</span>'}
+      </div>`;
+    });
+    html += `<button class="btn btn-sm btn-primary" data-bulk-action="confirmApprove" data-ids='${JSON.stringify(ids)}'>Conferma approvazione (${ids.length})</button>
+             <button class="btn btn-sm btn-secondary" data-bulk-action="hideBulkPreview">Annulla</button>`;
+    previewDiv.innerHTML = html;
+  } catch (err) {
+    previewDiv.innerHTML = '<p style="color: var(--danger);">Errore caricamento anteprime</p>';
+  }
+}
+
+async function confirmBulkApprove(ids) {
+  try {
+    const res = await fetch('/api/companies/bulk-approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`${data.updated} aziende approvati`);
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+function showImportForm() {
+  document.getElementById('importForm').style.display = 'block';
+}
+
+async function previewCsv() {
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) return;
+  const text = await file.text();
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) { showToast('CSV deve avere almeno intestazione + 1 riga', 'error'); return; }
+  const headers = lines[0].replace(/\r$/, '').split(/[,;\t]/).map(h => h.trim());
+  const sample = lines[1].split(/[,;\t]/).map(h => h.trim());
+  const dbFields = ['title','email','website','phone_number','comune','provincia','nome_studio','nome_azienda','address','via','cap','rating','rating_count'];
+  let html = '<table style="font-size:12px;"><tr><th>Colonna CSV</th><th>Anteprima</th><th>Mappa a</th></tr>';
+  headers.forEach((h, i) => {
+    html += `<tr><td>${escapeHtml(h)}</td><td>${escapeHtml(sample[i] || '—')}</td>
+      <td><select id="map_${i}" style="font-size:12px;padding:2px;">
+        <option value="">— ignora —</option>
+        ${dbFields.map(f => `<option value="${f}" ${f === h.toLowerCase().replace(/[^a-z]/g,'') ? 'selected' : ''}>${f}</option>`).join('')}
+      </select></td></tr>`;
+  });
+  html += '</table>';
+  document.getElementById('csvPreview').style.display = 'block';
+  document.getElementById('csvMapping').innerHTML = html;
+  document.getElementById('importBtn').disabled = false;
+}
+
+async function importCsv(event) {
+  const file = document.getElementById('csvFile').files[0];
+  if (!file) { showToast('Nessun file selezionato', 'error'); return; }
+  const csv = await file.text();
+  const columnMapping = {};
+  const headers = csv.split('\n')[0].split(/[,;\t]/).map(h => h.trim());
+  headers.forEach((h, i) => {
+    const sel = document.getElementById(`map_${i}`);
+    if (sel && sel.value) columnMapping[h] = sel.value;
+  });
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Importazione...';
+
+  try {
+    const res = await fetch('/api/companies/import-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csv, columnMapping, campaign_id: document.getElementById('importCampaignId').value || null })
+    });
+    const data = await res.json();
+    document.getElementById('importResult').innerHTML =
+      `<span style="color: var(--success);">Importati: ${data.imported}</span> / Saltati: ${data.skipped} / Errori: ${data.errors.length}`;
+    if (data.imported > 0) {
+      showToast(`${data.imported} aziende importati`);
+      setTimeout(() => location.reload(), 1500);
+    }
+  } catch (err) {
+    showToast('Errore importazione', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Importa';
+}
+
+let kanbanActive = false;
+function toggleKanban() {
+  kanbanActive = !kanbanActive;
+  const kanbanView = document.getElementById('kanbanView');
+  const tableView = document.getElementById('tableView');
+  const kanbanToggle = document.getElementById('kanbanToggle');
+  if (kanbanView) kanbanView.style.display = kanbanActive ? 'block' : 'none';
+  if (tableView) tableView.style.display = kanbanActive ? 'none' : 'block';
+  if (kanbanToggle) kanbanToggle.textContent = kanbanActive ? 'Vista Lista' : 'Vista Kanban';
+  if (kanbanActive) loadKanban();
+}
+
+async function loadKanban() {
+  const container = document.getElementById('kanbanContainer');
+  container.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--text-secondary);">Caricamento...</p>';
+  try {
+    const res = await fetch('/api/companies/kanban');
+    const data = await res.json();
+    renderKanban(data);
+  } catch (err) {
+    container.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--danger);">Errore caricamento</p>';
+  }
+}
+
+function renderKanban(data) {
+  const columns = [
+    { title: 'Senza bozza', key: 'noDraft', empty: 'Nessun azienda senza bozza' },
+    { title: 'Bozza da approvare', key: 'pendingApproval', empty: 'Nessuna bozza da approvare' },
+    { title: 'Approvate da inviare', key: 'approved', empty: 'Nessuna approvata da inviare' },
+    { title: 'Inviate', key: 'sent', empty: 'Nessuna inviata' },
+  ];
+  const container = document.getElementById('kanbanContainer');
+  let html = '';
+  columns.forEach(col => {
+    const items = data[col.key] || [];
+    html += `<div style="background:var(--bg-body);border-radius:12px;padding:12px;min-height:200px;">
+      <h4 style="margin-bottom:8px;font-size:14px;font-weight:600;">${escapeHtml(col.title)} (${items.length})</h4>
+      ${items.length === 0 ? `<p style="font-size:12px;color:var(--text-secondary);padding:8px;">${escapeHtml(col.empty)}</p>` : ''}
+      ${items.map(d => `
+        <div style="background:white;border-radius:8px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid var(--border);">
+          <strong style="font-size:13px;display:block;">${escapeHtml(d.nome_studio || '—')}</strong>
+          ${d.comune ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">${escapeHtml(d.comune)}</div>` : ''}
+          ${d.bozza_email_oggetto ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(d.bozza_email_oggetto.substring(0, 30))}${d.bozza_email_oggetto.length > 30 ? '…' : ''}</div>` : ''}
+          <a href="/companies/${d.id}" style="font-size:11px;color:var(--brand-primary);display:inline-block;margin-top:6px;text-decoration:none;">Dettaglio &rarr;</a>
+        </div>
+      `).join('')}
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+async function toggleApprove(id, checkbox) {
+  var previous = !checkbox.checked;
+  try {
+    var res = await fetch('/api/companies/' + id + '/approve', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvato: checkbox.checked })
+    });
+    var data = await res.json();
+    if (!data.success) { checkbox.checked = previous; showToast('Errore', 'error'); }
+    else showToast('Aggiornato');
+  } catch(e) { checkbox.checked = previous; showToast('Errore di connessione', 'error'); }
+}
+
+function closeDraftPreview() {
+  document.getElementById('draftPreviewModal').style.display = 'none';
+}
+async function previewDraft(id) {
+  var modal = document.getElementById('draftPreviewModal');
+  var content = document.getElementById('draftPreviewContent');
+  content.innerHTML = '<p>Caricamento...</p>';
+  modal.style.display = 'flex';
+  try {
+    var res = await fetch('/api/companies/' + id + '/preview');
+    var data = await res.json();
+    if (data.bozza_email) {
+      content.innerHTML = '<div style="margin-bottom:8px;"><strong>Oggetto:</strong> ' + escapeHtml(data.bozza_email_oggetto || '—') + '</div><hr style="margin:8px 0;"><div style="white-space:pre-wrap;">' + escapeHtml(data.bozza_email) + '</div>';
+    } else {
+      content.innerHTML = '<p style="color:var(--text-secondary);">Nessuna bozza disponibile.</p>';
+    }
+  } catch(e) {
+    content.innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+function bulkEdit() {
+  document.getElementById('bulkEditModal').style.display = 'flex';
+}
+
+async function bulkAssignCampaign() {
+  var ids = Array.from(document.querySelectorAll('.company-select:checked')).map(cb => parseInt(cb.value));
+  var cid = document.getElementById('bulkCampaignSelect').value;
+  if (ids.length === 0) { showToast('Nessun azienda selezionato', 'error'); return; }
+  if (!cid) { showToast('Seleziona una campagna', 'error'); return; }
+  try {
+    var res = await fetch('/api/companies/bulk-campaign', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ids, campaign_id: parseInt(cid) })
+    });
+    var data = await res.json();
+    if (data.success) showToast(data.updated + ' aziende assegnati alla campagna');
+    else showToast('Errore', 'error');
+  } catch(e) { showToast('Errore di connessione', 'error'); }
+}
+
+async function confirmBulkEdit(event) {
+  const checkedCbs = document.querySelectorAll('.company-select:checked');
+  const ids = Array.from(checkedCbs).filter(cb => cb.dataset.inviato !== 'true').map(cb => parseInt(cb.value));
+  const skipped = Array.from(checkedCbs).filter(cb => cb.dataset.inviato === 'true').length;
+  if (skipped > 0) showToast(skipped + ' già inviati, ignorati', 'warning');
+  if (ids.length === 0) { showToast('Nessun azienda valido selezionato', 'error'); return; }
+  const oggetto = document.getElementById('bulkNewSubject').value;
+  const corpo = document.getElementById('bulkNewBody').value;
+  if (!oggetto && !corpo) { showToast('Inserisci oggetto o corpo da modificare', 'error'); return; }
+  const btn = event.target; btn.disabled = true; btn.textContent = 'Salvataggio...';
+  let done = 0, errors = 0;
+  for (const id of ids) {
+    const body = {};
+    if (oggetto) body.bozza_email_oggetto = oggetto;
+    if (corpo) body.bozza_email = corpo;
+    try {
+      const res = await fetch('/api/companies/' + id, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.success) done++; else errors++;
+    } catch { errors++; }
+  }
+  document.getElementById('bulkEditResult').innerHTML = '<span style="color:var(--success)">' + done + ' aggiornati</span> / <span style="color:var(--danger)">' + errors + ' errori</span>';
+  btn.disabled = false; btn.textContent = 'Applica a selezionati';
+}
+
+async function exportSelected() {
+  var ids = Array.from(document.querySelectorAll('.company-select:checked')).map(function(cb) { return cb.value; });
+  if (ids.length === 0) { showToast('Nessun azienda selezionato', 'error'); return; }
+  window.location.href = '/api/companies/export?ids=' + ids.join(',');
+}
+
+// --- Init: event listener bindings (replaces removed inline event handler attributes) ---
+(function() {
+  // Elements with IDs
+  document.getElementById('selectAll').addEventListener('change', toggleAll);
+  document.getElementById('bulkApproveBtn').addEventListener('click', bulkApprove);
+  document.getElementById('bulkEditBtn').addEventListener('click', bulkEdit);
+  document.getElementById('bulkCampaignBtn').addEventListener('click', bulkAssignCampaign);
+  document.getElementById('bulkExportBtn').addEventListener('click', exportSelected);
+  document.getElementById('kanbanToggle').addEventListener('click', toggleKanban);
+  document.getElementById('csvFile').addEventListener('change', previewCsv);
+  document.getElementById('importBtn').addEventListener('click', importCsv);
+  document.getElementById('scrollTopBtn').addEventListener('click', function() {
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+
+  // Elements without IDs (class-based selectors)
+  document.querySelector('.js-show-import-form').addEventListener('click', showImportForm);
+  document.querySelector('.js-close-import').addEventListener('click', function() {
+    document.getElementById('importForm').style.display = 'none';
+  });
+  document.querySelector('.js-confirm-bulk-edit').addEventListener('click', confirmBulkEdit);
+  document.querySelector('.js-close-bulk-edit').addEventListener('click', function() {
+    document.getElementById('bulkEditModal').style.display = 'none';
+  });
+  document.querySelector('.js-close-draft-preview').addEventListener('click', closeDraftPreview);
+
+  // Multiple elements (forEach)
+  document.querySelectorAll('.company-select').forEach(function(el) {
+    el.addEventListener('change', updateBulkBtn);
+  });
+  document.querySelectorAll('.js-preview-draft').forEach(function(el) {
+    el.addEventListener('click', function() { previewDraft(parseInt(this.dataset.id)); });
+  });
+  document.querySelectorAll('.js-toggle-approve').forEach(function(el) {
+    el.addEventListener('change', function() { toggleApprove(parseInt(this.dataset.id), this); });
+  });
+
+  // Modal backdrop — close on backdrop click
+  document.getElementById('draftPreviewModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDraftPreview();
+  });
+
+  // Event delegation for dynamic HTML generated in bulkApprove()
+  if (!window._bulkActionDelegated) {
+    document.getElementById('bulkPreview').addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-bulk-action]');
+      if (!btn) return;
+      if (btn.dataset.bulkAction === 'confirmApprove') confirmBulkApprove(JSON.parse(btn.dataset.ids));
+      if (btn.dataset.bulkAction === 'hideBulkPreview') document.getElementById('bulkPreview').style.display = 'none';
+    });
+    window._bulkActionDelegated = true;
+  }
+})();
+</script>
+<button id="scrollTopBtn" style="display:none;position:fixed;bottom:24px;left:24px;z-index:999;padding:10px 16px;border-radius:8px;background:var(--brand-gradient);color:white;border:none;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">↑ Torna su</button>
+<script>
+window.addEventListener('scroll', function() {
+  document.getElementById('scrollTopBtn').style.display = window.scrollY > 600 ? 'block' : 'none';
+});
+</script>

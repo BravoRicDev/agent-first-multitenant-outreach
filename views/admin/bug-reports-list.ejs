@@ -1,0 +1,82 @@
+<div class="page-header">
+  <h1>Segnalazioni Bug</h1>
+  <div style="display:flex;gap:8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <a href="/bug-reports/new" class="btn btn-primary">+ Nuova segnalazione</a>
+  </div>
+</div>
+
+<div class="card">
+  <form id="filterForm" class="filters">
+    <div class="filter-group">
+      <label>Stato</label>
+      <select name="status">
+        <option value="">Tutti</option>
+        <option value="aperto">Aperto</option>
+        <option value="in_lavorazione">In lavorazione</option>
+        <option value="risolto">Risolto</option>
+        <option value="chiuso">Chiuso</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Priorit&agrave;</label>
+      <select name="priority">
+        <option value="">Tutte</option>
+        <option value="bassa">Bassa</option>
+        <option value="normale">Normale</option>
+        <option value="alta">Alta</option>
+        <option value="critica">Critica</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Filtra</button>
+    <a href="/bug-reports" class="btn btn-secondary btn-sm">Reset</a>
+  </form>
+</div>
+
+<div class="card">
+  <div id="reportsList"><p style="color:var(--text-secondary);">Caricamento...</p></div>
+</div>
+
+<script>
+async function load() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const res = await fetch('/api/bug-reports?' + params.toString());
+    const reports = await res.json();
+    let html = '<table><thead><tr><th>ID</th><th>Utente</th><th>Categoria</th><th>Descrizione</th><th>Priorit&agrave;</th><th>Stato</th><th>Data</th></tr></thead><tbody>';
+    reports.forEach(r => {
+      html += '<tr data-id="' + r.id + '" style="cursor:pointer;">';
+      html += '<td>#' + r.id + '</td>';
+      html += '<td><strong>' + escapeHtml((r.user_name || '') + ' ' + (r.user_surname || '')).trim() + '</strong></td>';
+      html += '<td>' + escapeHtml(r.categoria || '—') + '</td>';
+      html += '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(r.description || '') + '</td>';
+      html += '<td><span class="badge badge-' + r.priority + '">' + r.priority + '</span></td>';
+      html += '<td><span class="badge badge-' + r.status + '">' + (r.status === 'in_lavorazione' ? 'In lavorazione' : r.status) + '</span></td>';
+      html += '<td style="font-size:13px;">' + new Date(r.created_at).toLocaleDateString('it-IT') + '</td>';
+      html += '</tr>';
+    });
+    if (reports.length === 0) html = '<div class="empty-state"><h3>Nessuna segnalazione</h3></div>';
+    html += '</tbody></table>';
+    document.getElementById('reportsList').innerHTML = html;
+  } catch (err) {
+    document.getElementById('reportsList').innerHTML = '<p style="color:var(--danger);">Errore caricamento</p>';
+  }
+}
+
+document.getElementById('filterForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const params = new URLSearchParams();
+  if (this.status.value) params.set('status', this.status.value);
+  if (this.priority.value) params.set('priority', this.priority.value);
+  window.location = '/bug-reports?' + params.toString();
+});
+
+load();
+
+document.getElementById('reportsList').addEventListener('click', function(e) {
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) {
+    window.location = '/bug-reports/' + tr.dataset.id;
+  }
+});
+</script>

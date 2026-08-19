@@ -1,0 +1,234 @@
+<div class="page-header">
+  <h1>Comuni / Zone</h1>
+  <div style="font-size: 14px; color: var(--text-secondary);">
+    <%= pagination.total %> comuni
+  </div>
+</div>
+
+<div class="card">
+  <form class="filters" method="get">
+    <div class="filter-group">
+      <label>Regione</label>
+      <select name="regione">
+        <option value="">Tutte</option>
+        <% regioni.forEach(r => { %>
+        <option value="<%= r.denominazione_regione %>" <%= filters.regione === r.denominazione_regione ? 'selected' : '' %>><%= r.denominazione_regione %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Provincia</label>
+      <select name="provincia">
+        <option value="">Tutte</option>
+        <% province.forEach(p => { %>
+        <option value="<%= p.sigla_provincia %>" <%= filters.provincia === p.sigla_provincia ? 'selected' : '' %>><%= p.sigla_provincia %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Eseguito</label>
+      <select name="eseguito">
+        <option value="">Tutti</option>
+        <option value="false" <%= filters.eseguito === 'false' ? 'selected' : '' %>>Da eseguire</option>
+        <option value="true" <%= filters.eseguito === 'true' ? 'selected' : '' %>>Eseguito</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Cerca</label>
+      <input type="text" name="search" placeholder="Cerca comune..." value="<%= filters.search || '' %>">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Filtra</button>
+    <a href="/municipalities" class="btn btn-secondary btn-sm">Reset</a>
+  </form>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 id="pipelineToggle" style="margin-bottom:12px;cursor:pointer;">
+      Pipeline per Regione ▾
+    </h3>
+    <div style="display:none;">
+      <% if (regionStats && regionStats.length > 0) { %>
+      <% const maxTot = Math.max(...regionStats.map(r => r.totale), 1); %>
+      <% regionStats.forEach(r => { %>
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px;">
+          <strong><%= r.denominazione_regione %></strong>
+          <span style="color:var(--text-secondary)"><%= r.eseguiti %>/<%= r.totale %> comuni · <%= r.aziende_trovati %> aziende</span>
+        </div>
+        <div style="height:8px;background:var(--bg-body);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;background:var(--success);border-radius:4px;width:<%= Math.round(r.eseguiti / Math.max(r.totale, 1) * 100) %>%"></div>
+        </div>
+      </div>
+      <% }) %>
+      <% } else { %>
+      <p style="color:var(--text-secondary);font-size:13px;">Nessun dato disponibile</p>
+      <% } %>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+    <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="selectAllMun"> Seleziona tutti
+    </label>
+    <button class="btn btn-sm btn-primary" id="bulkMarkBtn" disabled>Segna come eseguiti (0)</button>
+  </div>
+
+  <% if (municipalities.length === 0) { %>
+  <div class="empty-state">
+    <h3>Nessun comune trovato</h3>
+  </div>
+  <% } else { %>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;"></th>
+          <th>Comune</th>
+          <th>CAP</th>
+          <th>Provincia</th>
+          <th>Regione</th>
+          <th>Codice ISTAT</th>
+          <th>Stato</th>
+          <th>Errori</th>
+          <th>Aziende</th>
+          <th>Invii</th>
+          <th>Ultima lavorazione</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% municipalities.forEach(m => { %>
+        <tr>
+          <td><input type="checkbox" class="mun-select" value="<%= m.id %>"></td>
+          <td><strong><%= m.denominazione_ita_altra %></strong></td>
+          <td><%= m.cap || '—' %></td>
+          <td><%= m.sigla_provincia || '—' %></td>
+          <td><%= m.denominazione_regione || '—' %></td>
+          <td><%= m.codice_istat ? String(parseInt(m.codice_istat)) : '—' %></td>
+          <td>
+            <% if (m.eseguito) { %>
+            <span class="badge badge-success">Eseguito</span>
+            <% } else { %>
+            <span class="badge badge-warning">In attesa</span>
+            <% } %>
+          </td>
+          <td>
+            <% if (m.error_count > 0) { %>
+            <span class="badge badge-danger" title="<%= (m.error_note || 'Errore sconosciuto').replace(/"/g, '&quot;') %>"><%= m.error_count %></span>
+            <% } else { %>—<% } %>
+          </td>
+          <td><%= m.company_count || 0 %></td>
+          <td><%= m.sent_count || 0 %></td>
+          <td><%= m.ultima_lavorazione ? (() => { try { return new Date(m.ultima_lavorazione).toLocaleString('it-IT'); } catch { return '—'; } })() : '—' %></td>
+          <td>
+            <% if (user.role === 'superadmin' || user.role === 'admin') { %>
+            <button class="btn btn-sm btn-secondary toggle-mun-btn" data-id="<%= m.id %>" data-action="<%= m.eseguito ? 'unexecute' : 'execute' %>" data-eseguito="<%= m.eseguito %>">
+              <%= m.eseguito ? 'Annulla' : 'Esegui' %>
+            </button>
+            <% } %>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if (pagination.pages > 1) { %>
+  <% const qs = (obj) => new URLSearchParams(Object.entries(obj).filter(([_, v]) => v !== '' && v !== undefined && v !== null)).toString(); %>
+  <div class="pagination">
+    <span style="font-size:13px;color:var(--text-secondary);margin-right:12px;">Pagina <%= pagination.page %> di <%= pagination.pages %> (<%= pagination.total %> totali)</span>
+    <% if (pagination.page > 1) { %><a href="?<%= qs({...filters, page: 1}) %>">&laquo;</a><% } %>
+    <% const winStart = Math.max(1, pagination.page - 5); %>
+    <% const winEnd = Math.min(pagination.pages, pagination.page + 5); %>
+    <% if (winStart > 1) { %><a href="?<%= qs({...filters, page: 1}) %>">1</a> <% if (winStart > 2) { %><span>…</span><% } %><% } %>
+    <% for (let p = winStart; p <= winEnd; p++) { %>
+      <% if (p === pagination.page) { %>
+        <span class="active"><%= p %></span>
+      <% } else { %>
+        <a href="?<%= qs({...filters, page: p}) %>"><%= p %></a>
+      <% } %>
+    <% } %>
+    <% if (winEnd < pagination.pages) { %><% if (winEnd < pagination.pages - 1) { %><span>…</span><% } %><a href="?<%= qs({...filters, page: pagination.pages}) %>"><%= pagination.pages %></a><% } %>
+    <% if (pagination.page < pagination.pages) { %><a href="?<%= qs({...filters, page: pagination.pages}) %>">&raquo;</a><% } %>
+  </div>
+  <% } %>
+  <% } %>
+</div>
+
+<script>
+async function toggleMunicipality(id, action) {
+  const nuovoStato = action === 'execute';
+  const currentEseguito = action === 'unexecute';
+  if (nuovoStato === currentEseguito) return;
+  if (!confirm('Sei sicuro di voler ' + (nuovoStato ? 'eseguire' : 'annullare') + ' questo comune?')) return;
+  try {
+    const res = await fetch('/api/municipalities/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eseguito: nuovoStato })
+    });
+    if (res.ok) { location.reload(); }
+    else { const d = await res.json(); alert(d.error || 'Errore'); }
+  } catch { alert('Errore di connessione'); }
+}
+
+function toggleAllMun() {
+  const checked = document.getElementById('selectAllMun').checked;
+  document.querySelectorAll('.mun-select').forEach(cb => cb.checked = checked);
+  updateBulkMunBtn();
+}
+
+function updateBulkMunBtn() {
+  const count = document.querySelectorAll('.mun-select:checked').length;
+  document.getElementById('bulkMarkBtn').disabled = count === 0;
+  document.getElementById('bulkMarkBtn').textContent = count > 0 ? `Segna come eseguiti (${count})` : 'Segna come eseguiti (0)';
+}
+
+async function bulkMarkMun() {
+  const ids = Array.from(document.querySelectorAll('.mun-select:checked')).map(cb => parseInt(cb.value));
+  if (ids.length === 0) return;
+  if (!confirm(`Segnare ${ids.length} comuni come eseguiti?`)) return;
+  try {
+    const res = await fetch('/api/municipalities/bulk-mark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, eseguito: true })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`${data.updated} comuni aggiornati`);
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+document.getElementById('selectAllMun').addEventListener('change', toggleAllMun);
+document.getElementById('bulkMarkBtn').addEventListener('click', bulkMarkMun);
+document.getElementById('pipelineToggle').addEventListener('click', function() {
+  var next = this.nextElementSibling;
+  next.style.display = next.style.display === 'none' ? 'block' : 'none';
+});
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('mun-select')) {
+    updateBulkMunBtn();
+  }
+});
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.toggle-mun-btn');
+  if (btn) {
+    toggleMunicipality(btn.dataset.id, btn.dataset.action);
+  }
+});
+</script>
+<button id="scrollTopBtn" style="display:none;position:fixed;bottom:24px;left:24px;z-index:999;padding:10px 16px;border-radius:8px;background:var(--brand-gradient);color:white;border:none;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">↑ Torna su</button>
+<script>
+window.addEventListener('scroll', function() {
+  document.getElementById('scrollTopBtn').style.display = window.scrollY > 600 ? 'block' : 'none';
+});
+document.getElementById('scrollTopBtn').addEventListener('click', function() {
+  window.scrollTo({top: 0, behavior: 'smooth'});
+});
+</script>

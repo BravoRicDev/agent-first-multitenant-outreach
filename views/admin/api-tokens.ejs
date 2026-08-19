@@ -1,0 +1,218 @@
+<div class="page-header">
+  <h1>Gestione Token API</h1>
+  <div style="display: flex; gap: 8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <button class="btn btn-primary" id="nuovoTokenBtn">Nuovo token</button>
+  </div>
+</div>
+
+<div class="card" id="newTokenForm" style="display:none;">
+  <h3 style="margin-bottom: 16px;">Nuovo Token API</h3>
+  <form id="createTokenForm">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>Utente</label>
+        <select name="user_id" required>
+          <option value="">-- Seleziona utente --</option>
+          <% users.forEach(u => { %>
+          <option value="<%= u.id %>"><%= u.name %> (<%= u.email %>)</option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nome token</label>
+        <input type="text" name="name" required placeholder="es. Integration API">
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>Tenant ID (opzionale)</label>
+        <input type="number" name="tenant_id" min="0" placeholder="Lascia vuoto per mono-tenant">
+      </div>
+      <div class="form-group">
+        <label>Scadenza</label>
+        <select name="expires_in_days">
+          <option value="30">30 giorni</option>
+          <option value="90">90 giorni</option>
+          <option value="365" selected>1 anno</option>
+          <option value="0">Mai (no scadenza)</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Crea token</button>
+    <button type="button" class="btn btn-secondary" id="annullaNewTokenBtn">Annulla</button>
+  </form>
+</div>
+
+<div class="card" id="tokenDisplayBox" style="display:none;border-left:4px solid var(--brand-primary);background:#f0f6ff;padding:20px;">
+  <h3 style="margin-bottom: 12px;color:var(--brand-primary);">✓ Token Creato</h3>
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">
+    Salva il token ora. Non sarà più visibile dopo questa schermata.
+  </p>
+  <div style="background:white;padding:16px;border-radius:6px;border:1px solid var(--border);margin-bottom:12px;font-family:monospace;font-size:12px;word-break:break-all;color:var(--text-primary);">
+    <span id="tokenValueDisplay"></span>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button type="button" id="copyTokenBtn" class="btn btn-sm btn-primary">📋 Copia</button>
+    <button type="button" id="closeTokenBoxBtn" class="btn btn-sm btn-secondary">Chiudi</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Token Attivi</h3>
+  <% if (tokens && tokens.length > 0) { %>
+  <table>
+    <thead>
+      <tr>
+        <th>Prefisso</th>
+        <th>Nome</th>
+        <th>Utente</th>
+        <th>Tenant</th>
+        <th>Scadenza</th>
+        <th>Ultimo uso</th>
+        <th>Creato il</th>
+        <th>Stato</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% tokens.forEach(t => {
+        const isRevoked = !!t.revoked_at;
+        const isExpired = t.expires_at && new Date(t.expires_at) < new Date() && !isRevoked;
+        const status = isRevoked ? 'revocato' : isExpired ? 'scaduto' : 'attivo';
+        const statusClass = isRevoked || isExpired ? 'badge-danger' : 'badge-success';
+      %>
+      <tr>
+        <td><code style="background:var(--bg-body);padding:2px 6px;border-radius:4px;font-size:12px;"><%= t.token_prefix %></code></td>
+        <td><%= t.name %></td>
+        <td>
+          <% if (t.user_name) { %>
+          <%= t.user_name %> <small style="color:var(--text-secondary);">(<%= t.user_email %>)</small>
+          <% } else { %>
+          <span style="color:var(--text-secondary);">—</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (t.tenant_id) { %>
+          <span class="badge badge-info"><%= t.tenant_id %></span>
+          <% } else { %>
+          <span style="color:var(--text-secondary);font-size:13px;">Nessuno</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (t.expires_at) { %>
+          <%= new Date(t.expires_at).toLocaleDateString('it-IT') %>
+          <% } else { %>
+          <span style="color:var(--text-secondary);">Mai</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (t.last_used_at) { %>
+          <%= new Date(t.last_used_at).toLocaleDateString('it-IT') %>
+          <% } else { %>
+          <span style="color:var(--text-secondary);">—</span>
+          <% } %>
+        </td>
+        <td><%= new Date(t.created_at).toLocaleDateString('it-IT') %></td>
+        <td>
+          <span class="badge <%= statusClass %>">
+            <%= status %>
+          </span>
+        </td>
+        <td>
+          <% if (!isRevoked) { %>
+          <button class="btn btn-sm btn-danger" data-action="revokeToken" data-token-id="<%= t.id %>" title="Revoca">🗑</button>
+          <% } else { %>
+          <span style="color:var(--text-secondary);font-size:12px;">—</span>
+          <% } %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } else { %>
+  <div class="empty-state">
+    <p>Nessun token API presente.</p>
+  </div>
+  <% } %>
+</div>
+
+<script>
+document.getElementById('nuovoTokenBtn')?.addEventListener('click', () => {
+  const form = document.getElementById('newTokenForm');
+  if (form) form.style.display = 'block';
+});
+
+document.getElementById('annullaNewTokenBtn')?.addEventListener('click', () => {
+  const form = document.getElementById('newTokenForm');
+  if (form) form.style.display = 'none';
+});
+
+document.getElementById('createTokenForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Creazione...';
+  const data = Object.fromEntries(new FormData(e.target));
+
+  try {
+    const res = await fetch('/api/admin/api-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.token) {
+      document.getElementById('newTokenForm').style.display = 'none';
+      document.getElementById('tokenValueDisplay').textContent = result.token;
+      document.getElementById('tokenDisplayBox').style.display = 'block';
+      e.target.reset();
+    } else {
+      showToast('Errore: ' + (result.error || 'sconosciuto'), 'error');
+      btn.disabled = false;
+      btn.textContent = 'Crea token';
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Crea token';
+  }
+});
+
+document.getElementById('copyTokenBtn')?.addEventListener('click', () => {
+  const tokenValue = document.getElementById('tokenValueDisplay').textContent;
+  navigator.clipboard.writeText(tokenValue).then(() => {
+    showToast('Token copiato negli appunti');
+  }).catch(() => {
+    showToast('Errore nel copia', 'error');
+  });
+});
+
+document.getElementById('closeTokenBoxBtn')?.addEventListener('click', () => {
+  document.getElementById('tokenDisplayBox').style.display = 'none';
+  setTimeout(() => location.reload(), 500);
+});
+
+async function revokeToken(tokenId) {
+  if (!confirm('Revoca questo token?')) return;
+  try {
+    const res = await fetch(`/api/admin/api-tokens/${tokenId}/revoke`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Token revocato');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast('Errore: ' + (data.error || 'sconosciuto'), 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  }
+}
+
+document.addEventListener('click', function(e) {
+  const revokeBtn = e.target.closest('[data-action="revokeToken"]');
+  if (revokeBtn) {
+    revokeToken(revokeBtn.dataset.tokenId);
+  }
+});
+</script>

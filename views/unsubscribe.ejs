@@ -1,0 +1,33 @@
+<% layout(false) %>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disiscrizione</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f8fafc; }
+    .card { max-width: 500px; width: 90%; background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h2 { margin-bottom: 12px; font-size: 24px; color: #1e293b; }
+    p { color: #64748b; font-size: 14px; line-height: 1.6; }
+    .emoji { font-size: 48px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <% if (status === 'ok') { %>
+    <div class="emoji">✅</div>
+    <h2><%= t('unsubscribe.success') %></h2>
+    <p><%= email %></p>
+    <% } else if (status === 'not_found') { %>
+    <div class="emoji">🔍</div>
+    <h2><%= t('unsubscribe.not_found') %></h2>
+    <p></p>
+    <% } else { %>
+    <div class="emoji">❌</div>
+    <h2><%= t('unsubscribe.error') %></h2>
+    <p></p>
+    <% } %>
+  </div>
+</body>
+</html>

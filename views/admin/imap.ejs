@@ -1,0 +1,190 @@
+<div class="page-header">
+  <h1>📬 Posta — <%= account.name %></h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="/admin/smtp-accounts" class="btn btn-secondary">← Account SMTP</a>
+    <button class="btn btn-secondary" onclick="location.reload()">🔄 Aggiorna</button>
+  </div>
+</div>
+
+<!-- Selettore cartella -->
+<div style="display:flex;gap:4px;margin-bottom:16px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:4px;width:fit-content;">
+  <a href="/admin/imap/<%= account.id %>?folder=INBOX"
+     class="imap-folder-tab <%= folder === 'INBOX' ? 'active' : '' %>">
+    📥 Ricevute
+  </a>
+  <a href="/admin/imap/<%= account.id %>?folder=INBOX.Sent"
+     class="imap-folder-tab <%= folder === 'INBOX.Sent' ? 'active' : '' %>">
+    📤 Inviate
+  </a>
+</div>
+
+<% if (error) { %>
+  <div class="card" style="padding:20px;text-align:center;">
+    <p style="color:var(--danger);font-size:16px;"><%= error %></p>
+    <% if (error.includes('IMAP non configurato')) { %>
+      <p style="margin-top:12px;color:var(--text-secondary);">
+        Configura IMAP nella pagina <a href="/admin/smtp-accounts">Account SMTP</a>.
+      </p>
+    <% } %>
+  </div>
+<% } else if (messages.length === 0) { %>
+  <div class="card" style="padding:20px;text-align:center;">
+    <p style="color:var(--text-secondary);font-size:16px;">
+      📭 Nessun messaggio nella cartella <%= folder === 'INBOX.Sent' ? 'inviate' : 'ricevute' %>
+    </p>
+  </div>
+<% } else { %>
+  <div class="card" style="overflow-x:auto;">
+    <table style="width:100%;font-size:13px;" id="imapTable">
+      <thead>
+        <tr>
+          <th style="width:30px;"></th>
+          <th style="width:200px;"><%= folder === 'INBOX.Sent' ? 'Destinatario' : 'Mittente' %></th>
+          <th>Oggetto</th>
+          <th style="width:160px;">Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% messages.forEach(msg => { %>
+          <tr class="imap-row" data-uid="<%= msg.uid %>" style="cursor:pointer;"
+              onclick="toggleMessage(<%= msg.uid %>, this)"
+              onmouseover="this.style.background='var(--hover-bg)'"
+              onmouseout="this.style.background=''">
+            <td style="text-align:center;">
+              <% if (!msg.seen) { %><span style="color:var(--brand-primary);font-size:18px;">●</span><% } %>
+            </td>
+            <td style="<%= msg.seen ? '' : 'font-weight:600;' %>">
+              <%= folder === 'INBOX.Sent' ? (msg.toName || msg.toEmail || '—') : (msg.fromName || msg.fromEmail || '—') %>
+              <div style="font-size:10px;color:var(--text-secondary);"><%= folder === 'INBOX.Sent' ? msg.toEmail : msg.fromEmail %></div>
+            </td>
+            <td style="<%= msg.seen ? '' : 'font-weight:600;' %>">
+              <%= msg.subject %>
+            </td>
+            <td style="font-size:11px;white-space:nowrap;">
+              <%= msg.date ? new Date(msg.date).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—' %>
+            </td>
+          </tr>
+          <tr id="body-<%= msg.uid %>" class="imap-body" style="display:none;">
+            <td colspan="4" style="padding:16px 24px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;">
+              <div id="body-content-<%= msg.uid %>" style="max-height:500px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">
+                Caricamento in corso...
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <div style="text-align:center;padding:8px;font-size:12px;color:var(--text-secondary);">
+    Ultimi <%= messages.length %> messaggi
+  </div>
+<% } %>
+
+<style>
+  .imap-row:hover { background:var(--hover-bg); }
+  .imap-body td { padding:0 !important; }
+  .imap-folder-tab {
+    display:inline-block;
+    padding:8px 16px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:500;
+    text-decoration:none;
+    color:var(--text-secondary);
+    transition:all .15s;
+  }
+  .imap-folder-tab:hover {
+    background:var(--hover-bg);
+    color:var(--text);
+  }
+  .imap-folder-tab.active {
+    background:var(--brand-primary);
+    color:#fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    .imap-body td { background:#1e293b !important; }
+  }
+</style>
+
+<script>
+const CURRENT_FOLDER = '<%= folder %>';
+let loadingUid = null;
+
+async function toggleMessage(uid, row) {
+  const bodyRow = document.getElementById('body-' + uid);
+  if (!bodyRow) return;
+  
+  const isVisible = bodyRow.style.display !== 'none';
+  
+  // Nascondi tutti gli altri body aperti
+  document.querySelectorAll('.imap-body').forEach(el => el.style.display = 'none');
+  
+  if (isVisible) return;
+  
+  bodyRow.style.display = 'table-row';
+  loadingUid = uid;
+  
+  const contentEl = document.getElementById('body-content-' + uid);
+  if (contentEl.textContent !== 'Caricamento in corso...') return;
+  
+  try {
+    const res = await fetch(`/admin/imap/<%= account.id %>/raw/${uid}?folder=<%= encodeURIComponent(folder) %>`);
+    const data = await res.json();
+    if (data.error) {
+      contentEl.textContent = '❌ ' + data.error;
+      return;
+    }
+    
+    let html = '';
+    // Header info
+    const labelFrom = CURRENT_FOLDER === 'INBOX.Sent' ? 'A' : 'Da';
+    const emailField = CURRENT_FOLDER === 'INBOX.Sent' ? data.toEmail : data.fromEmail;
+    const nameField = CURRENT_FOLDER === 'INBOX.Sent' ? data.toName : data.fromName;
+    html += `<div style="margin-bottom:12px;padding:8px 12px;background:var(--hover-bg);border-radius:6px;font-size:12px;">`;
+    html += `<strong>${labelFrom}:</strong> ${nameField || emailField} &lt;${emailField}&gt;<br>`;
+    if (data.date) html += `<strong>Data:</strong> ${new Date(data.date).toLocaleString('it-IT')}<br>`;
+    html += `<strong>Oggetto:</strong> ${data.subject || '(nessuno)'}`;
+    html += `</div>`;
+
+    // Email originale inviata (se trovata nel DB)
+    if (data.originalCompany) {
+      html += `<div style="margin-bottom:12px;padding:8px 12px;background:var(--hover-bg);border-left:3px solid #22c55e;border-radius:6px;font-size:12px;">`;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">`;
+      html += `<strong style="color:#22c55e;">📨 Email inviata — ${escapeHtml(data.originalCompany.name || '')}</strong>`;
+      if (data.originalCompany.sentAt) {
+        html += `<span style="color:var(--text-secondary);font-size:11px;">Inviata: ${new Date(data.originalCompany.sentAt).toLocaleString('it-IT')}</span>`;
+      }
+      html += `</div>`;
+      html += `<details style="margin-top:4px;">`;
+      html += `<summary style="cursor:pointer;font-weight:500;color:var(--text);">📄 ${escapeHtml(data.originalCompany.subject || '(nessun oggetto)')}</summary>`;
+      html += `<div style="margin-top:8px;padding:8px;background:var(--card-bg);border-radius:4px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;">${escapeHtml(data.originalCompany.body || '(nessun contenuto)')}</div>`;
+      html += `</details></div>`;
+    }
+    
+    // Body
+    if (data.htmlText) {
+      // Email HTML — la inseriamo in un iframe sandbox per sicurezza
+      const safeHtml = data.htmlText
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
+        .replace(/on\w+\s*=\s*'[^']*'/gi, '');
+      html += `<div style="border:1px solid var(--border);border-radius:6px;padding:16px;max-height:400px;overflow-y:auto;">${safeHtml}</div>`;
+    } else if (data.bodyText) {
+      html += `<pre style="white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.5;margin:0;">${escapeHtml(data.bodyText)}</pre>`;
+    } else {
+      html += `<p style="color:var(--text-secondary);">(nessun contenuto testo)</p>`;
+    }
+    
+    contentEl.innerHTML = html;
+  } catch (e) {
+    contentEl.textContent = '❌ Errore di caricamento: ' + e.message;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>

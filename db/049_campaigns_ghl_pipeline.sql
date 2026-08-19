@@ -1,0 +1,5 @@
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS pipeline_id TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stage_new_lead TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stage_email_sent TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stage_opened TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stage_replied TEXT;

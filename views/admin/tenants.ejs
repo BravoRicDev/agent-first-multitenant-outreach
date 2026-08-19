@@ -1,0 +1,270 @@
+<div class="page-header">
+  <h1>Gestione Tenant</h1>
+  <div style="display: flex; gap: 8px;">
+    <a href="javascript:history.back()" class="btn btn-sm btn-secondary">← Indietro</a>
+    <button class="btn btn-primary" id="nuovoTenantBtn">Nuovo tenant</button>
+  </div>
+</div>
+
+<div class="card" id="newTenantForm" style="display:none;">
+  <h3 style="margin-bottom: 16px;">Nuovo Tenant</h3>
+  <form id="createTenantForm">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>Nome tenant *</label>
+        <input type="text" name="name" required placeholder="es. Tenant Acme Corp">
+      </div>
+      <div class="form-group">
+        <label>ID CMS (opzionale)</label>
+        <input type="number" name="site_id" min="1" placeholder="Collegamento a CMS">
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div class="form-group">
+        <label>Quota email/giorno (opzionale)</label>
+        <input type="number" name="daily_email_quota" min="1" placeholder="Lascia vuoto per illimitato">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" name="test_mode" value="true">
+          Test mode (no invio reale)
+        </label>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Crea tenant</button>
+    <button type="button" class="btn btn-secondary" id="annullaNuovoTenantBtn">Annulla</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom: 16px;">Tenant Attivi</h3>
+  <% if (tenants && tenants.length > 0) { %>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nome</th>
+        <th>ID CMS</th>
+        <th>Stato</th>
+        <th>Quota</th>
+        <th>Test Mode</th>
+        <th>Creato il</th>
+        <th>Aggiornato il</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% tenants.forEach(t => {
+        const statusBadge = t.is_active ? 'badge-success' : 'badge-danger';
+        const statusText = t.is_active ? 'Attivo' : 'Inattivo';
+        const quotaText = t.daily_email_quota ? t.daily_email_quota : 'Illimitato';
+        const testModeText = t.test_mode ? 'Sì' : 'No';
+      %>
+      <tr>
+        <td><strong><%= t.id %></strong></td>
+        <td><%= t.name %></td>
+        <td>
+          <% if (t.site_id) { %>
+          <span class="badge badge-info"><%= t.site_id %></span>
+          <% } else { %>
+          <span style="color:var(--text-secondary);font-size:13px;">—</span>
+          <% } %>
+        </td>
+        <td>
+          <span class="badge <%= statusBadge %>"><%= statusText %></span>
+        </td>
+        <td>
+          <small><%= quotaText %></small>
+        </td>
+        <td>
+          <small><%= testModeText %></small>
+        </td>
+        <td>
+          <small><%= fmtDateShort(t.created_at) %></small>
+        </td>
+        <td>
+          <small><%= fmtDateShort(t.updated_at) %></small>
+        </td>
+        <td>
+          <div style="display: flex; gap: 4px;">
+            <button type="button" class="btn btn-xs btn-secondary toggleActiveBtn" data-id="<%= t.id %>" data-active="<%= t.is_active %>">
+              <%= t.is_active ? '⊘ Disattiva' : '✓ Attiva' %>
+            </button>
+            <button type="button" class="btn btn-xs btn-secondary editQuotaBtn" data-id="<%= t.id %>">
+              💾 Quota
+            </button>
+            <button type="button" class="btn btn-xs btn-secondary editTestModeBtn" data-id="<%= t.id %>" data-test-mode="<%= t.test_mode %>">
+              <%= t.test_mode ? '✓ Test OFF' : '⊘ Test ON' %>
+            </button>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } else { %>
+  <p style="color: var(--text-secondary); text-align: center; padding: 20px;">Nessun tenant trovato</p>
+  <% } %>
+</div>
+
+<div class="card" id="quotaModalBox" style="display:none;border-left:4px solid var(--brand-primary);padding:20px;">
+  <h3 style="margin-bottom: 12px;color:var(--brand-primary);">Aggiorna Quota</h3>
+  <form id="quotaForm">
+    <div class="form-group">
+      <label>Quota email/giorno (vuoto = illimitato)</label>
+      <input type="number" id="quotaInput" name="daily_email_quota" min="1" placeholder="Lascia vuoto per illimitato">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn-sm btn-primary">Salva</button>
+      <button type="button" id="closeQuotaModalBtn" class="btn btn-sm btn-secondary">Annulla</button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .btn-xs {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .badge-info {
+    background-color: var(--brand-primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: inline-block;
+  }
+  .badge-success {
+    background-color: #10b981;
+    color: white;
+  }
+  .badge-danger {
+    background-color: #ef4444;
+    color: white;
+  }
+</style>
+
+<script>
+  document.getElementById('nuovoTenantBtn')?.addEventListener('click', function() {
+    document.getElementById('newTenantForm')?.style.display = 'block';
+  });
+
+  document.getElementById('annullaNuovoTenantBtn')?.addEventListener('click', function() {
+    document.getElementById('newTenantForm')?.style.display = 'none';
+    document.getElementById('createTenantForm')?.reset();
+  });
+
+  document.getElementById('createTenantForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+      name: formData.get('name'),
+      site_id: formData.get('site_id') || null,
+      daily_email_quota: formData.get('daily_email_quota') || null,
+      test_mode: formData.get('test_mode') === 'on',
+    };
+
+    try {
+      const res = await fetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Errore: ' + (err.error || 'Errore creazione tenant'));
+        return;
+      }
+      alert('Tenant creato con successo');
+      location.reload();
+    } catch (err) {
+      alert('Errore: ' + err.message);
+    }
+  });
+
+  document.querySelectorAll('.toggleActiveBtn')?.forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const tenantId = this.dataset.id;
+      if (!confirm('Sei sicuro?')) return;
+      try {
+        const res = await fetch(`/api/admin/tenants/${tenantId}/toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Errore: ' + (err.error || 'Errore aggiornamento'));
+          return;
+        }
+        alert('Aggiornato');
+        location.reload();
+      } catch (err) {
+        alert('Errore: ' + err.message);
+      }
+    });
+  });
+
+  let currentTenantIdForQuota = null;
+  document.querySelectorAll('.editQuotaBtn')?.forEach(btn => {
+    btn.addEventListener('click', function() {
+      currentTenantIdForQuota = this.dataset.id;
+      document.getElementById('quotaInput').value = '';
+      document.getElementById('quotaModalBox').style.display = 'block';
+    });
+  });
+
+  document.getElementById('closeQuotaModalBtn')?.addEventListener('click', function() {
+    document.getElementById('quotaModalBox')?.style.display = 'none';
+  });
+
+  document.getElementById('quotaForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (!currentTenantIdForQuota) return;
+    const quotaValue = document.getElementById('quotaInput').value;
+    const data = { daily_email_quota: quotaValue || null };
+
+    try {
+      const res = await fetch(`/api/admin/tenants/${currentTenantIdForQuota}/quota`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Errore: ' + (err.error || 'Errore aggiornamento'));
+        return;
+      }
+      alert('Quota aggiornata');
+      location.reload();
+    } catch (err) {
+      alert('Errore: ' + err.message);
+    }
+  });
+
+  document.querySelectorAll('.editTestModeBtn')?.forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const tenantId = this.dataset.id;
+      const currentTestMode = this.dataset.testMode === 'true';
+      const newTestMode = !currentTestMode;
+
+      if (!confirm(`${newTestMode ? 'Attivare' : 'Disattivare'} test mode?`)) return;
+
+      try {
+        const res = await fetch(`/api/admin/tenants/${tenantId}/test-mode`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test_mode: newTestMode }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Errore: ' + (err.error || 'Errore aggiornamento'));
+          return;
+        }
+        alert('Test mode aggiornato');
+        location.reload();
+      } catch (err) {
+        alert('Errore: ' + err.message);
+      }
+    });
+  });
+</script>

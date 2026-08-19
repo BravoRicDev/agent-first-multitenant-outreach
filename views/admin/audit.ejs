@@ -1,0 +1,159 @@
+<div class="page-header">
+  <h1>Audit Log</h1>
+  <a href="javascript:history.back()" class="btn btn-secondary">← Indietro</a>
+</div>
+
+<div style="margin-bottom:16px;">
+  <a href="/admin/errors" class="btn btn-sm btn-secondary">📊 Error Digest</a>
+</div>
+
+<div class="card">
+  <form method="get" action="/admin/audit" class="filters">
+    <div class="filter-group">
+      <label>Azione</label>
+      <select name="action">
+        <option value="">Tutte</option>
+        <% (actions || []).forEach(a => { %>
+        <option value="<%= a.action %>" <%= filters.action === a.action ? 'selected' : '' %>><%= a.action %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Risorsa</label>
+      <select name="resource">
+        <option value="">Tutte</option>
+        <% ['companies', 'auth', 'users', 'direzione', 'cron', 'settings', 'blacklist_patterns', 'followup_sequences'].forEach(r => { %>
+        <option value="<%= r %>" <%= filters.resource === r ? 'selected' : '' %>><%= r %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>ID Risorsa</label>
+      <input type="text" name="resource_id" placeholder="ID" value="<%= filters.resource_id || '' %>" style="width: 100px;">
+    </div>
+    <div class="filter-group">
+      <label>Utente</label>
+      <select name="user_id">
+        <option value="">Tutti</option>
+        <% (users || []).forEach(u => { %>
+        <option value="<%= u.id %>" <%= filters.user_id == u.id ? 'selected' : '' %>><%= u.name %> (<%= u.email %>)</option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Periodo</label>
+      <select name="days">
+        <option value="">Tutto</option>
+        <option value="1" <%= filters.days === '1' ? 'selected' : '' %>>Ultimo giorno</option>
+        <option value="7" <%= filters.days === '7' ? 'selected' : '' %>>Ultima settimana</option>
+        <option value="30" <%= filters.days === '30' ? 'selected' : '' %>>Ultimo mese</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-sm btn-primary">Filtra</button>
+    <a href="/admin/audit" class="btn btn-sm btn-secondary">Reset</a>
+    <a href="/api/admin/audit/export?<%= new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([_,v]) => v))).toString() %>" class="btn btn-sm btn-secondary">Scarica CSV</a>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Utente</th>
+        <th>Azione</th>
+        <th>Risorsa</th>
+        <th>ID Risorsa</th>
+        <th>Dettagli</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% logs.forEach(log => { %>
+      <tr>
+        <td><%= new Date(log.created_at).toLocaleString('it-IT') %></td>
+        <td><%= log.user_name || '—' %> <small><%= log.user_email || '' %></small></td>
+        <td><span class="badge badge-info"><%= log.action %></span></td>
+        <td><%= log.resource %></td>
+        <td>
+          <% if (log.resource === 'companies' && log.resource_id) { %>
+          <a href="/companies/<%= log.resource_id %>"><%= log.resource_id || '—' %></a>
+          <% } else { %>
+          <%= log.resource_id || '—' %>
+          <% } %>
+        </td>
+        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;"
+            data-details="<%= log.details ? encodeURIComponent(JSON.stringify(log.details)) : '' %>"
+            class="details-cell"
+            title="Clicca per dettagli">
+          <%= log.details ? JSON.stringify(log.details).substring(0, 60) : '—' %><% if (log.details && JSON.stringify(log.details).length > 60) { %>…<% } %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% if (logs.length === 0) { %>
+  <div class="empty-state">
+    <h3>Nessun log</h3>
+  </div>
+  <% } %>
+  <% if (pagination && pagination.pages > 1) { %>
+  <div class="pagination">
+    <% if (pagination.page > 1) { %>
+    <a href="/admin/audit?page=1<%= filters.action ? '&action=' + encodeURIComponent(filters.action) : '' %><%= filters.resource ? '&resource=' + encodeURIComponent(filters.resource) : '' %><%= filters.resource_id ? '&resource_id=' + encodeURIComponent(filters.resource_id) : '' %><%= filters.user_id ? '&user_id=' + encodeURIComponent(filters.user_id) : '' %><%= filters.days ? '&days=' + encodeURIComponent(filters.days) : '' %>">«</a>
+    <% } %>
+    <% for (let p = Math.max(1, pagination.page - 5); p <= Math.min(pagination.pages, pagination.page + 5); p++) { %>
+      <a href="/admin/audit?page=<%= p %><%= filters.action ? '&action=' + encodeURIComponent(filters.action) : '' %><%= filters.resource ? '&resource=' + encodeURIComponent(filters.resource) : '' %><%= filters.resource_id ? '&resource_id=' + encodeURIComponent(filters.resource_id) : '' %><%= filters.user_id ? '&user_id=' + encodeURIComponent(filters.user_id) : '' %><%= filters.days ? '&days=' + encodeURIComponent(filters.days) : '' %>"
+         class="<%= p === pagination.page ? 'active' : '' %>"><%= p %></a>
+    <% } %>
+    <% if (pagination.page < pagination.pages) { %>
+    <a href="/admin/audit?page=<%= pagination.pages %><%= filters.action ? '&action=' + encodeURIComponent(filters.action) : '' %><%= filters.resource ? '&resource=' + encodeURIComponent(filters.resource) : '' %><%= filters.resource_id ? '&resource_id=' + encodeURIComponent(filters.resource_id) : '' %><%= filters.user_id ? '&user_id=' + encodeURIComponent(filters.user_id) : '' %><%= filters.days ? '&days=' + encodeURIComponent(filters.days) : '' %>">»</a>
+    <% } %>
+  </div>
+  <% } %>
+</div>
+
+<div id="auditDetailModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+  <div style="background:white;border-radius:12px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;padding:24px;">
+    <h3 style="margin-bottom: 12px;">Dettaglio audit</h3>
+    <pre id="auditDetailContent" style="white-space: pre-wrap; word-break: break-all;"></pre>
+    <button class="btn btn-sm btn-secondary" id="closeAuditDetailBtn" style="margin-top: 12px;">Chiudi</button>
+  </div>
+</div>
+
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function showDetails(el) {
+  const details = el.dataset.details || '';
+  try {
+    const parsed = JSON.parse(decodeURIComponent(details));
+    document.getElementById('auditDetailContent').textContent = JSON.stringify(parsed, null, 2);
+  } catch {
+    document.getElementById('auditDetailContent').textContent = details || '—';
+  }
+  document.getElementById('auditDetailModal').style.display = 'flex';
+}
+
+function closeAuditDetail() {
+  document.getElementById('auditDetailModal').style.display = 'none';
+}
+
+// Converted from inline onclick/onclick handlers
+document.addEventListener('click', function(e) {
+  const cell = e.target.closest('.details-cell');
+  if (cell) {
+    showDetails(cell);
+    return;
+  }
+});
+
+document.getElementById('auditDetailModal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeAuditDetail();
+});
+
+document.getElementById('closeAuditDetailBtn')?.addEventListener('click', closeAuditDetail);
+</script>

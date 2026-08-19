@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+tmp/
+
+# Ad-hoc scripts and test files (not for publication)
+build_codebase.sh
+generate-all.mjs
+plain_codebase.sh
+test-batch.mjs
+test-decarli.mjs
+test-scrape-edge.mjs
+
+# Internal tools and temporary data
+.hermes/
+backup/
+*.zip

@@ -1,0 +1,9 @@
+INSERT INTO settings (key, value) VALUES ('cron_municipality_enabled', 'true') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('cron_queue_enabled', 'true') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('cron_draft_enabled', 'true') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('cron_followup_enabled', 'true') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('max_emails_per_day', '500') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('guardrail_bounce_rate_max', '10') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('guardrail_consecutive_errors_max', '5') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('guardrail_send_window_start', '08:00') ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('guardrail_send_window_end', '18:00') ON CONFLICT (key) DO NOTHING;
