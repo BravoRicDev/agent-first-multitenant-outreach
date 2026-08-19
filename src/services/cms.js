@@ -341,7 +341,7 @@ export async function syncCompanyWithCms(company) {
     }
 
     await query(
-      `UPDATE companies SET consent_status = $1, consent_channels = $2, consent_basis = $3, consent_source = $4, cms_synced_at = NOW() WHERE id = $5 AND tenant_id =$6)`,
+      `UPDATE companies SET consent_status = $1, consent_channels = $2, consent_basis = $3, consent_source = $4, cms_synced_at = NOW() WHERE id = $5 AND tenant_id = $6)`,
       [consentStatus, JSON.stringify(consentChannels), consentBasis, consentSource, company.id, company.tenant_id]
     );
     return consentStatus;

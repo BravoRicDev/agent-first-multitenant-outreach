@@ -432,19 +432,15 @@ restituisce, per campagna o globale:
 Nessun nuovo endpoint dedicato agli alert: il canale di lettura è il log strutturato +
 `audit_log`, coerente con l'assenza di notifiche push nel servizio dopo la rimozione di Telegram.
 
-## Consenso granulare per canale (Req 4 — predisposizione, non ancora applicata)
+## Consenso granulare per canale (Req 4 — implementazione attiva)
 
-`companies.consent_status` (`cold`/`marketing`) resta **l'unica fonte di verità** usata da
-`enforceConsent` oggi — nessuna modifica di comportamento in questo giro. La migrazione
-`db/083_consent_channels_prep.sql` aggiunge due colonne **preparatorie**, non lette da nessuna
-logica applicativa:
+`companies.consent_channels` (JSONB) e `companies.consent_basis` (VARCHAR) sono **già implementati e utilizzati** dal servizio:
 
-- `companies.consent_channels JSONB` — forma prevista `{"email":true,"sms":false,"phone":true,
-  "whatsapp":false}`, allineata a preferenze per-canale del CMS multi-tenant
-  (vedi `SPEC-MULTITENANT-FUNNEL.md` §Requisito 4 per il piano di adozione).
-- `companies.consent_basis VARCHAR(30)` — `'consent'` (consenso esplicito) o
-  `'legitimate_interest'` (interesse legittimo, tipico del cold B2B one-to-one) — distinzione che
-  il CMS multi-tenant supporterà (vedi SPEC).
+- **Lettura**: `enforceConsent` in `src/services/email-sender.js` legge `consent_channels` per applicare il controllo per-canale (`email: true → ammesso`, altrimenti bloccato per quel canale). Se `consent_channels` è NULL/assente, ricade nel comportamento legacy di retro-compatibilità usando solo `consent_status`.
+
+- **Scrittura**: `syncCompanyWithCms` in `src/services/cms.js` scrive `consent_channels` (forma `{"email":true,"sms":false,"phone":true,"whatsapp":false}`, derivata dalle preferenze CMS multi-tenant) e `consent_basis` (`'consent'` per consenso esplicito, `'legitimate_interest'` per interesse legittimo, tipico del cold B2B one-to-one), sincronizzando i dati dal CMS verso il DB del servizio.
+
+La migrazione `db/083_consent_channels_prep.sql` aggiunge le colonne JSONB/VARCHAR, già utilizzate dalla logica applicativa. Questo consente isolamento per-canale e tracciamento della base legale, coerente con il piano di conformità multi-tenant (vedi `SPEC-MULTITENANT-FUNNEL.md` §Requisito 4).
 
 ## Gestione tenant — Pannello admin (Fase 5)
 
