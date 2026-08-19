@@ -105,9 +105,8 @@ il token agente (RBAC speculare, stessa `roles_permissions` dell'admin UI — ve
 §Permessi agenti). `funnel_metrics` implementa il requisito 10 (metriche + alert): stessa funzione
 di calcolo (`src/services/funnel-metrics.js`) usata anche dal cron `funnelAlerts`.
 
-I tre tool "Funnel B2B" (introdotti per coprire i gap "setting telefonico" e
-"booking videocall" del funnel B2B, vedi `GAP-ANALYSIS-FUNNEL.md` nella cartella
-padre del progetto) fanno avanzare `companies.funnel_stage`
+I tre tool "Funnel B2B" (`companies_call_outcome`, `companies_funnel_stage_set`,
+`companies_booking_set`) fanno avanzare `companies.funnel_stage`
 (`prospect→contacted→called→booked→demo→won/lost`) e, quando l'esito è positivo,
 garantiscono (best-effort) un'opportunità sul CMS via `ensureOpportunityForStage`
 — stessa risoluzione pipeline/stage-map di `companies_cms_sync`, ma con uno

@@ -31,15 +31,22 @@ Flusso consenso (freddi vs consensati):
 
 ### 1.1 Modello tenant / Tenancy model
 
-- **Outreach = single-tenant per istanza**: un deploy = un `CMS_SITE_ID` (sezione 2), collegato
-  a un solo sito del CMS.
+- **Outreach = multi-tenant enforced a livello di DB**: ogni tabella core ha `tenant_id NOT NULL`
+  (migrazioni 086-087); `scopeTenant(tenantId)` lancia errore se tenantId è null. Non esiste
+  retro-compatibilità "tenant 0" — ogni record appartiene a un tenant specifico.
+- **Risoluzione tenant**: i token agente (`agtok_...`) sono legati a `api_tokens.tenant_id`;
+  `verifyApiToken` restituisce il tenant della richiesta. Le query applica automaticamente
+  `AND tenant_id = $N`.
+- **Collegamento CMS = single-tenant per istanza**: un deploy outreach è collegato a un solo
+  `CMS_SITE_ID` (env var), che corrisponde a un sito del CMS multi-tenant.
 - **CMS = multi-tenant**: un unico deploy CMS serve più siti (`site_id` proprio ciascuno,
   endpoint agent scoping per sito).
 - **Per N siti CMS → N deploy/istanze outreach** (una per `CMS_SITE_ID`), ognuna con il proprio
-  `.env`, DB e (se serve) proprio SMTP. Non esiste oggi un modo di far gestire più siti a una
-  sola istanza: sarebbe un'estensione futura del servizio (fuori scopo di questo deploy).
+  `.env`, DB e (se serve) proprio SMTP. Il multi-tenant del DB interno è indipendente dal
+  collegamento 1:1 con il CMS: il DB è scalabile, il deploy è single-site per CMS.
 - Il bridge `src/services/cms.js` è già pronto per il multi-tenant a livello di funzioni
-  (accettano `siteId`); il single-tenant è solo una scelta di configurazione (`CMS_SITE_ID`).
+  (accettano `siteId`); potrebbe evolversi verso multi-site in futuro, ma oggi è single-site
+  per scelta di configurazione.
 
 ```
 site_id=1 (Sito A)       ← deploy outreach A (CMS_SITE_ID=1, DB "outreach_a")

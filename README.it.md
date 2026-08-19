@@ -166,13 +166,13 @@ Questi sono i default; i singoli tenant possono personalizzare via `/admin/setti
 
 Questo servizio è **multi-tenant imposto** — ogni richiesta è scoped a un tenant:
 
-- **Identificazione tenant**: via claim JWT `tenant_id`, estratto dall'header del token
+- **Identificazione tenant**: via token agente (`api_tokens.tenant_id`), risolto da `verifyApiToken`
 - **Catalogo tenant**: memorizzato nella tabella `tenants`; accessibile via `/admin/tenants` (solo admin)
-- **Gestione quota**: ogni tenant ha `active_quota` (max email concorrenti al giorno) e flag `test_mode`
-- **Partizionamento dati**: tutte le tabelle includono la FK `tenant_id`; le query filtrano per tenant
-- **Applicazione**: il middleware `scope-tenant.js` rifiuta accessi cross-tenant
+- **Gestione quota**: ogni tenant ha `daily_email_quota` (max email al giorno) e flag `test_mode`
+- **Partizionamento dati**: tutte le tabelle core includono `tenant_id NOT NULL`; query filtrate via `scopeTenant`
+- **Applicazione**: `scopeTenant(tenantId)` lancia errore se null; il middleware rifiuta accessi cross-tenant
 
-Esempio: una richiesta con JWT contenente `{ tenant_id: "acme" }` può accedere solo alle campaign, ai contatti e alle metriche di ACME.
+Esempio: una richiesta con un token agente legato a `tenant_id=1` può accedere solo alle campaign, contatti e metriche di quel tenant.
 
 Vedi [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) → sezione "Multi-Tenancy" per i dettagli implementativi.
 
@@ -203,10 +203,12 @@ Le traduzioni coprono:
 Questo servizio espone un'interfaccia **Model Context Protocol (MCP)** per workflow di agenti AI:
 
 - **Endpoint**: `POST /api/mcp` (richiede `Authorization: Bearer ***`
-- **Tool**: set estensibile di tool per lead scoring, copywriting email, estrazione contenuti, query CMS
-- **Esempio**: un agente può chiamare `extract_leads`, `score_leads`, `draft_email` e `sync_to_cms` come operazioni atomiche
+- **Tool**: set estensibile di tool per ingestione lead, copywriting email, query CMS
+- **Esempio**: un agente può chiamare `companies_ingest`, `companies_draft_generate`, `companies_send` e `companies_cms_sync` come operazioni atomiche
 
-Vedi [`AGENT.md`](AGENT.md) e [`MCP.md`](MCP.md) per documentazione dei tool ed esempi.
+Vedi [`AGENT.md`](AGENT.md), [`MCP.md`](MCP.md) e la guida bootstrap per agenti
+[`docs/AGENT-BOOTSTRAP.md`](docs/AGENT-BOOTSTRAP.md) per documentazione dei tool, setup ed
+esempi (setup, collegamento al CMS, flusso di lavoro tipico, risoluzione problemi).
 
 ## Contribuire
 

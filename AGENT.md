@@ -56,36 +56,45 @@ log) and never blocks the local operation requested by the agent.
 
 ## Modello tenant / Tenancy model
 
-> Il blueprint di evoluzione verso il multi-tenant (fasi ordinate, rischio/dipendenze per fase) è
-> in `SPEC-MULTITENANT-FUNNEL.md` (cartella padre del progetto, requisiti 1-2).
->
-> **Fase 1** (realizzata): colonna `tenant_id` (nullable) su tutte le tabelle core (`companies`,
-> `campaigns`, `email_queue`, `followup_sequences`, `smtp_accounts`, `send_schedule`,
-> `blacklist_patterns`), con indici composti + helper `scopeTenant` in `src/services/scope-tenant.js`.
-> Semantica: un record appartiene a un tenant se `tenant_id == tenant` **oppure** `tenant_id IS NULL`
-> (tenant 0, mono-tenant storico, per retro-compatibilità). Nessuna logica di scoping applicata
-> ancora — predisposizione strutturale.
->
-> **Fase 2A** (questa): binding ai-token → tenant, risoluzione automatica, scope applica su query
-> agent read-only. Ogni token `agtok_...` (tabella `api_tokens`) è legato opzionalmente a un
-> `tenant_id`. Quando `verifyApiToken` restituisce l'utente, include il `tenant_id` del token;
-> le rotte agent read-only su tabelle core applica `scopeTenant(req.user.tenant_id)` automaticamente
-> — un agente di tenant X non vede prospect di altri tenant. Questo giro **non** implementa il
-> multi-tenant pieno — solo la predisposizione 2A e il binding per gli agenti.
+### Stato attuale: Multi-tenant ENFORCED
 
-- **Outreach = single-tenant per istanza.** Ogni istanza di `outreach-service` è configurata
-  con **un solo** `CMS_SITE_ID` (`src/config.js` → `config.cmsSiteId`) e si collega a **un solo**
-  sito del CMS.
-- **CMS = multi-tenant.** Un unico deploy del CMS serve più siti, ognuno col proprio `site_id`; i suoi endpoint agent sono scoping
-  per sito (`/api/agent/sites/:siteId/...`) — un token del sito A non vede il sito B.
-- **Collegamento**: 1 istanza outreach ↔ 1 sito CMS, scelto via `CMS_SITE_ID`. Per gestire più
-  siti servono **N istanze outreach** (una per sito) — oppure, in futuro, estendere il servizio
-  per diventare multi-tenant (opzione da valutare, **non implementata ora**).
-- Il bridge `src/services/cms.js` è già **tenant-neutral a livello di funzioni**:
-  `upsertContact`, `ensureOpportunity`, `getContactConsent`, `setContactOptOut`, `addNote`,
-  `getPipelines` accettano tutte `siteId` come parametro (con `config.cmsSiteId` solo come
-  default). Il single-tenant di oggi deriva unicamente dalla configurazione, non da un limite
-  del codice.
+Il servizio è **multi-tenant enforced** a livello di database e query:
+
+- **DB multi-tenant obbligatorio**: Ogni tabella core (`companies`, `campaigns`, `email_queue`,
+  `followup_sequences`, `smtp_accounts`, `send_schedule`, `blacklist_patterns`, `api_tokens`,
+  `test_recipients`) contiene una colonna `tenant_id NOT NULL` (migrazione 087), con indici
+  composti per query scoped per tenant.
+- **scopeTenant() lancia errore su null**: `src/services/scope-tenant.js` → `scopeTenant(tenantId)`
+  applica il filtro `AND tenant_id = $N` — se `tenantId` è null/undefined, lancia
+  `TypeError("multi-tenant is now mandatory")`. Nessuna retro-compatibilità "tenant 0" (NULL):
+  ogni richiesta richiede un `tenant_id` valido. Le query costruite senza scoping verrebbero
+  bloccate dalla funzione helper.
+- **Risoluzione tenant da token agente**: Il servizio autentica gli agenti con un **api-token
+  locale** (`agtok_...`, tabella `api_tokens`, colonna `tenant_id`). `verifyApiToken`
+  (`src/middleware/agent-auth.js`) restituisce `req.user` popolato con il `tenant_id` del token.
+  Le rotte agent applica automaticamente `scopeTenant(req.user.tenant_id)` su read (nessun accesso
+  cross-tenant); su write (ingest, draft, send) il tenant viene da `req.user.tenant_id`.
+- **Catalogo tenant**: Tabella `tenants` (migrazione 086) contiene
+  `id, name, site_id, is_active, daily_email_quota, test_mode, created_at, updated_at`.
+  Helper in `src/services/tenants.js` per consultare/aggiornare il catalogo.
+
+### Collegamento CMS: 1 istanza ↔ 1 sito / Integrazione con CMS
+
+Questa istanza di outreach è configurata con **un solo** `CMS_SITE_ID` (env var, salvato in
+`src/config.js` → `config.cmsSiteId`), collegato a un sito del CMS multi-tenant:
+
+- **Outreach: single-tenant per istanza** — ogni deploy serve un sito CMS solo.
+- **CMS: multi-tenant** — un unico deploy CMS serve più siti (`site_id` ciascuno), con endpoint
+  agent `/api/agent/sites/:siteId/...` scoped per sito.
+- **Per N siti CMS servono N istanze outreach** (una per sito), ciascuna con proprio DB,
+  `.env` e `CMS_SITE_ID` diverso. Il multi-tenant del DB interno non entra in conflitto con
+  questa configurazione: il multi-tenant DB è un'implementazione interna richiesta da esigenze
+  di scalabilità; il single-tenant istanza vs CMS è una scelta di deployment (potrebbe evolversi
+  in futuro, ma non è implementato ora).
+- **Bridge CMS tenant-neutral**: `src/services/cms.js` — `upsertContact`, `ensureOpportunity`,
+  `getContactConsent`, `setContactOptOut`, `addNote`, `getPipelines` — accettano tutte `siteId`
+  come parametro (default `config.cmsSiteId`). Il collegamento è già pronto a supportare
+  multi-sito, se il servizio dovesse evolversi verso quel modello.
 
 ```
 CMS (multi-tenant)                    Outreach (single-tenant per istanza)
@@ -94,11 +103,12 @@ site_id=2 (Sito B)       ◄──────────  istanza B  (CMS_SITE
 site_id=3 (Sito C)       ◄──────────  istanza C  (CMS_SITE_ID=3)
 ```
 
-*(EN)* Outreach is single-tenant per instance (one `CMS_SITE_ID` each); the CMS is multi-tenant
-(one `site_id` per site, agent endpoints scoped per site). One outreach instance links to one
-CMS site via `CMS_SITE_ID`; multiple sites need multiple instances (or, later, a multi-tenant outreach — not
-implemented now). `cms.js` functions already take `siteId` as a parameter, so the bridge itself
-is tenant-neutral — only the config makes an instance single-tenant.
+*(EN)* The service is **multi-tenant enforced** at the database level (tenant_id NOT NULL on all
+core tables, queries scoped by `scopeTenant`). Each instance connects to one CMS site via
+`CMS_SITE_ID` (single-tenant per instance), while the CMS itself is multi-tenant (one `site_id`
+per site). Multiple CMS sites need multiple outreach instances. The DB's multi-tenant structure
+(required for internal scalability) is independent from the deployment model (single instance per
+CMS site).
 
 ## Come ottenere un api-token agente / How to get an agent api-token
 
@@ -231,8 +241,7 @@ Company {
 
 ## Modalità test (sicurezza invii) / Test mode (send safety)
 
-> Requisito 7 dello scenario d'uso — vedi `SPEC-MULTITENANT-FUNNEL.md` (cartella padre) per la
-> formalizzazione completa.
+Barriera di sicurezza per la prevenzione di invii accidentali a contatti reali durante i test.
 
 Quando `test_mode` è **attivo** (`settings.test_mode = 'true'`), la barriera in
 `src/services/test-mode.js` viene valutata da `src/services/email-sender.js` **prima di ogni
@@ -267,8 +276,8 @@ additional layer, not a replacement.
 
 ## Permessi agenti = speculari all'utente (RBAC) / Agent permissions mirror the user
 
-> Requisito 9 — nessun ruolo nuovo introdotto: l'agente eredita ruolo e permessi dell'utente a cui
-> il suo api-token è legato (stesso modello, non uno parallelo).
+L'agente eredita ruolo e permessi dell'utente a cui il suo api-token è legato (stesso modello,
+non uno parallelo):
 
 - `api_tokens.user_id` lega ogni token `agtok_...` a un `users.id` esistente (vedi
   `db/075_api_tokens.sql`, `src/services/api-tokens.js`): `verifyApiToken` restituisce `role`
@@ -281,27 +290,30 @@ additional layer, not a replacement.
   legato a un utente `collaboratore` (permesso `settings.can_update = false` di default, vedi
   `db/023_roles_permissions_default.sql`) riceve `403`, un agente legato ad `admin`/`superadmin`
   può scrivere — esattamente come accadrebbe per l'utente umano sull'admin UI.
-- **Verificato ma NON rinforzato in questo giro** (rischio di rompere integrazioni agent
-  esistenti senza un ciclo di test dedicato): le rotte di scrittura più vecchie di questo router
+- **Rotte di scrittura con RBAC esplicito**: le rotte moderne test-mode, funnel-metrics e gli
+  endpoint di creazione campagne supportano già `authorize(...)`. Le rotte più vecchie
   (`companies_send`, `companies_optout`, `companies/:id` PUT, `call-outcome`, `booking`,
-  `funnel-stage`, `ingest`) **non** hanno ancora un `authorize(...)` esplicito — qualunque token
-  valido, indipendentemente dal ruolo dell'utente proprietario, può eseguirle. Segnalato anche in
-  `GAP-REFINEMENT-*.md` (cartella padre) come raccomandazione per la prossima fase (aggiungere
-  `authorize('companies', ...)` route per route, con test di non-regressione dedicati — nota anche
-  che `roles_permissions` non ha ancora righe per `resource='companies'`, quindi vanno aggiunte
-  insieme, altrimenti ogni non-superadmin verrebbe bloccato ovunque).
+  `funnel-stage`, `ingest`) **non** hanno RBAC esplicito oggi — qualunque token valido,
+  indipendentemente dal ruolo, può eseguirle. Questo è un gap noto; la prossima fase dovrebbe
+  aggiungere `authorize('companies', ...)` a queste rotte (con test di non-regressione) e
+  aggiungere righe per `resource='companies'` in `roles_permissions`.
 
-## Confine di responsabilità outreach / CMS (Req 6)
+## Confine di responsabilità outreach / CMS
 
-> L'outreach fa **solo** i passi di contatto (prospect, invio email, esiti, follow-up); delega al
-> CMS tutto il resto (contatti, opportunità, pipeline, booking reale). Verificato in questo giro:
-> nessuna rotta di questo servizio crea una pipeline, un'opportunità primaria o uno scheduling
-> proprio — vedi `src/services/cms.js` (`upsertContact`, `ensureOpportunity*`, `addNote`,
-> `setContactOptOut`) usato ovunque serva CRM reale. `companies.funnel_stage` / `call_status` /
-> `booking_status` sono stato **sintetico locale** (mai lo stato di sistema): esistono solo per
-> sapere "a che punto è" un prospect senza interrogare il CMS ad ogni richiesta, e per innescare
-> `ensureOpportunityForStage` — non duplicano la pipeline CMS. Vedi `SPEC-MULTITENANT-FUNNEL.md`
-> §Principi architetturali per il dettaglio completo.
+L'outreach fa **solo** i passi di contatto (prospect, invio email, esiti, follow-up); delega al
+CMS tutto il resto (contatti, opportunità, pipeline, booking reale):
+
+- **CRM vive sul CMS**: contatti, opportunità, pipeline, accordi commerciali sono creati/gestiti
+  via API CMS (`src/services/cms.js` — `upsertContact`, `ensureOpportunity*`, `addNote`,
+  `setContactOptOut`) — nessuna rotta outreach crea una pipeline o una opportunità primaria.
+- **Stato sintetico locale**: `companies.funnel_stage` / `call_status` / `booking_status` sono
+  **locali sintetici**, non lo stato di sistema. Servono a sapere "a che punto è" un prospect
+  senza interrogare il CMS a ogni richiesta, e a innescare `ensureOpportunityForStage` quando
+  appropriato — non duplicano la pipeline CMS.
+- **Best-effort verso il CMS**: ogni contatto, esito, booking viene sincronizzato verso il CMS
+  via `cms-sync` (`POST /api/agent/companies/:id/cms-sync`), best-effort — se il CMS non è
+  configurato, la sincronizzazione fallisce in modo silenzioso (warning) e non blocca l'operazione
+  locale.
 
 ## Flusso tipico / Typical flow
 
@@ -361,9 +373,10 @@ Nessun endpoint fa invio SMTP sincrono o scraping: riusano i servizi esistenti
 
 ## Funnel B2B lato outreach / B2B funnel on the outreach side
 
-> Vedi anche `GAP-ANALYSIS-FUNNEL.md` (cartella padre del progetto) per l'analisi completa
-> del funnel `ricerca prospect → cold email → setting telefonico → booking → videocall →
-> demo → vendite` sui due sistemi (CMS + outreach) e le raccomandazioni per il CMS.
+Questo servizio traccia il funnel lato outreach, mantenendo lo stato locale sintetico. Il funnel
+completo `ricerca prospect → cold email → setting telefonico → booking → videocall → demo → vendite`
+è distribuito tra outreach (contatti, email, esiti, booking) e CMS (pipeline, opportunità,
+contratti) — il servizio sincronizza i dati verso il CMS best-effort via `cms.js`.
 
 `companies.funnel_stage` traccia sinteticamente a che punto è un prospect, lato outreach:
 
@@ -417,8 +430,8 @@ restituisce, per campagna o globale:
 - **Esiti chiamata/booking**: breakdown per `call_status`/`booking_status`.
 - **Prospect bloccati** (`stuck`): conteggio + campione (max 50) di prospect in uno stadio non
   terminale (`funnel_stage NOT IN ('won','lost')`) senza aggiornamenti da più di `stuck_days`
-  giorni (default 14) — proxy su `updated_at`, non esiste ancora una cronologia per-stadio (gap
-  segnalato in `GAP-REFINEMENT-*.md`, cartella padre).
+  giorni (default 14) — proxy su `updated_at` (cronologia per-stadio è un gap noto per evoluzione
+  futura).
 
 **Alert automatizzato** (`src/services/funnel-alerts.js`, cron ogni ora, `HH:20`, guardia
 `funnel_alert_enabled`): confronta `open_rate`/`reply_rate` con le soglie in `settings`
@@ -431,16 +444,6 @@ restituisce, per campagna o globale:
 
 Nessun nuovo endpoint dedicato agli alert: il canale di lettura è il log strutturato +
 `audit_log`, coerente con l'assenza di notifiche push nel servizio dopo la rimozione di Telegram.
-
-## Consenso granulare per canale (Req 4 — implementazione attiva)
-
-`companies.consent_channels` (JSONB) e `companies.consent_basis` (VARCHAR) sono **già implementati e utilizzati** dal servizio:
-
-- **Lettura**: `enforceConsent` in `src/services/email-sender.js` legge `consent_channels` per applicare il controllo per-canale (`email: true → ammesso`, altrimenti bloccato per quel canale). Se `consent_channels` è NULL/assente, ricade nel comportamento legacy di retro-compatibilità usando solo `consent_status`.
-
-- **Scrittura**: `syncCompanyWithCms` in `src/services/cms.js` scrive `consent_channels` (forma `{"email":true,"sms":false,"phone":true,"whatsapp":false}`, derivata dalle preferenze CMS multi-tenant) e `consent_basis` (`'consent'` per consenso esplicito, `'legitimate_interest'` per interesse legittimo, tipico del cold B2B one-to-one), sincronizzando i dati dal CMS verso il DB del servizio.
-
-La migrazione `db/083_consent_channels_prep.sql` aggiunge le colonne JSONB/VARCHAR, già utilizzate dalla logica applicativa. Questo consente isolamento per-canale e tracciamento della base legale, coerente con il piano di conformità multi-tenant (vedi `SPEC-MULTITENANT-FUNNEL.md` §Requisito 4).
 
 ## Gestione tenant — Pannello admin (Fase 5)
 

@@ -166,13 +166,13 @@ These are defaults; individual tenants can customize via `/admin/settings`.
 
 This service is **enforced multi-tenant** — every request is scoped to a tenant:
 
-- **Tenant Identification**: Via JWT claim `tenant_id`, extracted from token header
+- **Tenant Identification**: Via agent token (`api_tokens.tenant_id`), resolved by `verifyApiToken`
 - **Tenant Catalog**: Stored in `tenants` table; accessed via `/admin/tenants` (admin-only)
-- **Quota Management**: Each tenant has `active_quota` (max concurrent emails per day) and `test_mode` flag
-- **Data Partitioning**: All tables include `tenant_id` foreign key; queries filter by tenant
-- **Enforcement**: Middleware `scope-tenant.js` rejects cross-tenant access
+- **Quota Management**: Each tenant has `daily_email_quota` (max emails per day) and `test_mode` flag
+- **Data Partitioning**: All core tables include `tenant_id NOT NULL`; queries filtered via `scopeTenant`
+- **Enforcement**: `scopeTenant(tenantId)` raises error if null; middleware rejects cross-tenant access
 
-Example: A request with JWT containing `{ tenant_id: "acme" }` can only access ACME's campaigns, contacts, and metrics.
+Example: A request with an agent token bound to `tenant_id=1` can only access that tenant's campaigns, contacts, and metrics.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) → "Multi-Tenancy" section for implementation details.
 
@@ -203,10 +203,12 @@ Translations cover:
 This service exposes a **Model Context Protocol (MCP)** interface for AI agent workflows:
 
 - **Endpoint**: `POST /api/mcp` (requires `Authorization: Bearer <JWT>`)
-- **Tools**: Extensible set of tools for lead scoring, email copywriting, content extraction, CMS queries
-- **Example**: An agent can call `extract_leads`, `score_leads`, `draft_email`, and `sync_to_cms` as atomic operations
+- **Tools**: Extensible set of tools for lead ingestion, email copywriting, CMS queries
+- **Example**: An agent can call `companies_ingest`, `companies_draft_generate`, `companies_send`, and `companies_cms_sync` as atomic operations
 
-See [`AGENT.md`](AGENT.md) and [`MCP.md`](MCP.md) for tool documentation and examples.
+See [`AGENT.md`](AGENT.md), [`MCP.md`](MCP.md) and the agent bootstrap guide
+[`docs/AGENT-BOOTSTRAP.md`](docs/AGENT-BOOTSTRAP.md) for tool documentation, setup and
+examples (setup, CMS wiring, typical agent workflow, troubleshooting).
 
 ## Contributing
 
